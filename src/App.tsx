@@ -3,7 +3,6 @@ import type { PocketAdvance, Agent, Poc, BoloPoi } from "./types";
 import { clearAdvance, loadAdvance, saveAdvance } from "./utils/storage";
 import { exportElementToPdf } from "./utils/exportPdf";
 
-// ✅ Put your logo here (adjust filename if needed)
 import radenLogo from "./assets/raden-logo.png";
 
 const APP_NAME = "Raden — The First Pocket Advance Generator";
@@ -517,85 +516,165 @@ export default function App() {
       <div className="appShell">
         {/* Top bar (NO backdrop-filter blur — fixes mac GPU “smear”) */}
         <div
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            background: "rgba(20,20,20,0.94)", // ✅ solid glass vibe, no blur
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "1600px",
-              margin: "0 auto",
-              padding: "14px 16px",
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <img
-                src={radenLogo}
-                alt="Raden logo"
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  objectFit: "cover",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                }}
-              />
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>{APP_NAME}</div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  Web-first MVP • autosaves locally • shareable presets
-                </div>
-              </div>
-            </div>
+  style={{
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    background: "rgba(20,20,20,0.94)", // ✅ solid glass vibe, no blur
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
+  }}
+>
+  <div
+    style={{
+      width: "100%",
+      maxWidth: "1600px",
+      margin: "0 auto",
+      padding: isNarrow ? "10px 12px" : "14px 16px", // ✅ tighter on mobile
+      display: "flex",
+      gap: 10,
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+    }}
+  >
+    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+      <img
+        src={radenLogo}
+        alt="Raden logo"
+        style={{
+          width: isNarrow ? 36 : 44,
+          height: isNarrow ? 36 : 44,
+          borderRadius: 12,
+          objectFit: "cover",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.06)",
+        }}
+      />
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ fontWeight: 900, fontSize: isNarrow ? 14 : 16 }}>
+          {APP_NAME}
+        </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <button onClick={handleNew} style={lightButtonStyle()}>
-                New
-              </button>
-              <button onClick={handleExport} style={darkButtonStyle()}>
-                Export PDF
-              </button>
-              <button
-                onClick={handleCopyLink}
-                style={lightButtonStyle()}
-                title="Copies a share link (template + redact)"
-              >
-                Copy Share Link
-              </button>
-              <button
-                onClick={toggleRedaction}
-                style={pillStyle(redactMode)}
-                title="Hide phones/addresses/last-known in preview + export"
-              >
-                {redactMode ? "Redaction: ON" : "Redaction: OFF"}
-              </button>
-              <button
-                onClick={() => setFitOnePage((p) => !p)}
-                style={pillStyle(fitOnePage)}
-                title="Auto-fit export to one page when possible"
-              >
-                {fitOnePage ? "1-Page Fit: ON" : "1-Page Fit: OFF"}
-              </button>
-            </div>
+        {/* Hide subtitle on mobile */}
+        {!isNarrow && (
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Web-first MVP • autosaves locally • shareable presets
           </div>
+        )}
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <button onClick={handleNew} style={lightButtonStyle()}>
+        New
+      </button>
+
+      <button onClick={handleExport} style={darkButtonStyle()}>
+        Export PDF
+      </button>
+
+      {/* Desktop only */}
+      {!isNarrow && (
+        <button
+          onClick={handleCopyLink}
+          style={lightButtonStyle()}
+          title="Copies a share link (template + redact)"
+        >
+          Copy Share Link
+        </button>
+      )}
+
+      <button
+        onClick={toggleRedaction}
+        style={pillStyle(redactMode)}
+        title="Hide phones/addresses/last-known in preview + export"
+      >
+        {redactMode ? "Redaction: ON" : "Redaction: OFF"}
+      </button>
+
+      {/* Desktop only */}
+      {!isNarrow && (
+        <button
+          onClick={() => setFitOnePage((p) => !p)}
+          style={pillStyle(fitOnePage)}
+          title="Auto-fit export to one page when possible"
+        >
+          {fitOnePage ? "1-Page Fit: ON" : "1-Page Fit: OFF"}
+        </button>
+      )}
+    </div>
+  </div>
+
+  {/* Template bar — Desktop only */}
+  {!isNarrow && (
+    <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "1600px",
+          margin: "0 auto",
+          padding: "10px 16px",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
+          Templates:
+        </div>
+
+        <button
+          onClick={() => applyTemplate("rst")}
+          style={pillStyle(template === "rst")}
+        >
+          RST
+        </button>
+        <button
+          onClick={() => applyTemplate("travel")}
+          style={pillStyle(template === "travel")}
+        >
+          Travel
+        </button>
+        <button
+          onClick={() => applyTemplate("event")}
+          style={pillStyle(template === "event")}
+        >
+          Event
+        </button>
+        <button
+          onClick={() => applyTemplate("estate")}
+          style={pillStyle(template === "estate")}
+        >
+          Estate
+        </button>
+        <button
+          onClick={() => applyTemplate("venue_restaurant")}
+          style={pillStyle(template === "venue_restaurant")}
+        >
+          Venue/Restaurant
+        </button>
+        <button
+          onClick={() => applyTemplate("location_generic")}
+          style={pillStyle(template === "location_generic")}
+        >
+          Location
+        </button>
+
+        <div style={{ fontSize: 12, opacity: 0.7, marginLeft: 8 }}>
+          Share link includes <b>template</b> (and optional <b>redaction</b>).
+        </div>
+      </div>
+    </div>
+  )}
+</div>
 
           {/* Template bar */}
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
