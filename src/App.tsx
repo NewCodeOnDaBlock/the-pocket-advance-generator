@@ -6,7 +6,7 @@ import { exportElementToPdf } from "./utils/exportPdf";
 // ✅ Put your logo here (adjust filename if needed)
 import radenLogo from "./assets/raden-logo.png";
 
-const APP_NAME = "Raden — Advanced Pocket Generator";
+const APP_NAME = "Raden — The Pocket Advance Generator";
 const APP_SHORT = "Raden";
 const COPYRIGHT_OWNER = "Raden";
 const YEAR = new Date().getFullYear();
