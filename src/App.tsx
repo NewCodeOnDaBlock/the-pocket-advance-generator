@@ -709,7 +709,7 @@ export default function App() {
                       />
                     </div>
                     <div style={field}>
-                      <div style={label}>Team Lead</div>
+                      <div style={label}>Team Lead(AIC)</div>
                       <input
                         style={controlBase}
                         value={data.teamLead}
@@ -1378,7 +1378,7 @@ export default function App() {
                         </div>
                         <div style={{ fontSize: 12 }}>
                           <div>
-                            <span style={{ fontWeight: 800 }}>Lead:</span>{" "}
+                            <span style={{ fontWeight: 800 }}>Lead (AIC):</span>{" "}
                             <span style={{ opacity: 0.85 }}>
                               {data.teamLead}
                             </span>
