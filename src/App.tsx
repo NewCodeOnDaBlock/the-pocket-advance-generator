@@ -397,35 +397,48 @@ export default function App() {
 
   async function handleExport() {
     if (!previewRef.current) return;
-    const previewEl = previewRef.current;
 
-    const originalTransform = previewEl.style.transform;
-    const originalOrigin = previewEl.style.transformOrigin;
-    const originalAttr = previewEl.getAttribute("data-compact-bolo") || "";
+    const live = previewRef.current;
+
+    // ✅ Clone the preview so we never mutate the live DOM
+    const clone = live.cloneNode(true) as HTMLDivElement;
+
+    // Put clone off-screen
+    const holder = document.createElement("div");
+    holder.style.position = "fixed";
+    holder.style.left = "-10000px";
+    holder.style.top = "0";
+    holder.style.width = "1000px";
+    holder.style.background = "transparent";
+    holder.style.zIndex = "999999";
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
 
     try {
+      // Optional: apply 1-page scaling to the clone only
       if (fitOnePage) {
-        const appliedScale = computeExportScale(previewEl, 1056);
-        previewEl.style.transformOrigin = "top left";
-        previewEl.style.transform = `scale(${appliedScale})`;
+        const targetHeightPx = 1056; // ~ letter page inner height at 96dpi
+        const h =
+          clone.scrollHeight || clone.getBoundingClientRect().height || 1;
+        const s = Math.min(1, Math.max(0.6, targetHeightPx / h));
+        clone.style.transformOrigin = "top left";
+        clone.style.transform = `scale(${s})`;
 
-        const projectedHeight = previewEl.scrollHeight * appliedScale;
-        previewEl.setAttribute(
+        const projectedHeight = h * s;
+        clone.setAttribute(
           "data-compact-bolo",
           projectedHeight > 1080 ? "1" : "0"
         );
       } else {
-        previewEl.setAttribute("data-compact-bolo", "0");
+        clone.setAttribute("data-compact-bolo", "0");
       }
 
       const file = `${sanitizeFilename(
         data.detailName || `${APP_SHORT}-Pocket-Advance`
       )}.pdf`;
-      await exportElementToPdf(previewEl, file);
+      await exportElementToPdf(clone, file);
     } finally {
-      previewEl.style.transform = originalTransform;
-      previewEl.style.transformOrigin = originalOrigin;
-      previewEl.setAttribute("data-compact-bolo", originalAttr);
+      document.body.removeChild(holder);
     }
   }
 
