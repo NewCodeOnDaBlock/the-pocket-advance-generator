@@ -41,7 +41,6 @@ const emptyAdvance: PocketAdvance = {
   arrivalTime: "",
   departTime: "",
 
-  // ✅ Alpha / Bravo drop points (pins/locations)
   alphaArrival: "",
   alphaDeparture: "",
   bravoArrival: "",
@@ -237,10 +236,54 @@ function darkButtonStyle() {
   } as const;
 }
 
+type WizardStep = {
+  id: string;
+  title: string;
+  optional?: boolean;
+  render: (ctx: WizardCtx) => JSX.Element;
+};
+
+type WizardCtx = {
+  data: PocketAdvance;
+  update: <K extends keyof PocketAdvance>(
+    key: K,
+    value: PocketAdvance[K]
+  ) => void;
+
+  // Agents
+  updateAgent: (idx: number, patch: Partial<Agent>) => void;
+  addAgent: () => void;
+  removeAgent: (idx: number) => void;
+
+  // POCs
+  updatePoc: (idx: number, patch: Partial<Poc>) => void;
+  addPoc: () => void;
+  removePoc: (idx: number) => void;
+
+  // BOLO / POI
+  updateBoloPoi: (idx: number, patch: Partial<BoloPoi>) => void;
+  addBolo: (type: "BOLO" | "POI") => void;
+  removeBoloPoi: (idx: number) => void;
+
+  // UI helpers
+  controlBase: React.CSSProperties;
+  controlSmall: React.CSSProperties;
+  label: React.CSSProperties;
+  formGrid: (cols: 1 | 2) => React.CSSProperties;
+  field: React.CSSProperties;
+  isInputsStack: boolean;
+  isNarrow: boolean;
+
+  // Template
+  template: TemplateKey | null;
+  applyTemplate: (t: TemplateKey) => void;
+};
+
 export default function App() {
   const [data, setData] = useState<PocketAdvance>(() =>
     loadAdvance({ ...emptyAdvance, date: todayISO() })
   );
+
   const previewRef = useRef<HTMLDivElement>(null);
 
   const [template, setTemplate] = useState<TemplateKey | null>(() =>
@@ -253,6 +296,11 @@ export default function App() {
 
   const isNarrow = useMediaQuery("(max-width: 900px)");
   const isInputsStack = useMediaQuery("(max-width: 560px)");
+
+  // Wizard state
+  const [stepIndex, setStepIndex] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
+  const [slideDir, setSlideDir] = useState<"next" | "prev">("next");
 
   useEffect(() => saveAdvance(data), [data]);
 
@@ -367,6 +415,8 @@ export default function App() {
     setTemplate(null);
     setUrlParams({ template: null, redact: redactMode });
     setData({ ...emptyAdvance, date: todayISO() });
+    setStepIndex(0);
+    setAnimKey((k) => k + 1);
   }
 
   async function handleCopyLink() {
@@ -391,10 +441,8 @@ export default function App() {
     if (!previewRef.current) return;
     const live = previewRef.current;
 
-    // ✅ Clone the preview so we never mutate the live DOM
     const clone = live.cloneNode(true) as HTMLDivElement;
 
-    // Put clone off-screen
     const holder = document.createElement("div");
     holder.style.position = "fixed";
     holder.style.left = "-10000px";
@@ -407,7 +455,7 @@ export default function App() {
 
     try {
       if (fitOnePage) {
-        const targetHeightPx = 1056; // ~ letter page inner height at 96dpi
+        const targetHeightPx = 1056;
         const h =
           clone.scrollHeight || clone.getBoundingClientRect().height || 1;
         const s = Math.min(1, Math.max(0.6, targetHeightPx / h));
@@ -432,6 +480,7 @@ export default function App() {
     }
   }
 
+  // === Derived values for preview ===
   const vVenue = redactValue(data.venueName, false);
   const vAddress = redactValue(data.address, redactMode);
 
@@ -446,7 +495,7 @@ export default function App() {
   const vBravoArr = redactValue(data.bravoArrival, redactMode);
   const vBravoDep = redactValue(data.bravoDeparture, redactMode);
 
-  // === FORM STYLES (prevents overlap) ===
+  // === FORM STYLES ===
   const formGrid = (cols: 1 | 2) =>
     ({
       display: "grid",
@@ -465,9 +514,9 @@ export default function App() {
 
   const label = { fontSize: 12, fontWeight: 800, opacity: 0.8 } as const;
 
-  const controlBase = {
+  const controlBase: React.CSSProperties = {
     width: "100%",
-    boxSizing: "border-box" as const,
+    boxSizing: "border-box",
     minWidth: 0,
     padding: "10px 12px",
     borderRadius: 10,
@@ -477,7 +526,782 @@ export default function App() {
     color: "inherit",
   };
 
-  const controlSmall = { ...controlBase, padding: "8px 10px" };
+  const controlSmall: React.CSSProperties = {
+    ...controlBase,
+    padding: "8px 10px",
+  };
+
+  const ctx: WizardCtx = {
+    data,
+    update,
+    updateAgent,
+    addAgent,
+    removeAgent,
+    updatePoc,
+    addPoc,
+    removePoc,
+    updateBoloPoi,
+    addBolo,
+    removeBoloPoi,
+    controlBase,
+    controlSmall,
+    label,
+    formGrid,
+    field,
+    isInputsStack,
+    isNarrow,
+    template,
+    applyTemplate,
+  };
+
+  const steps: WizardStep[] = [
+    {
+      id: "template",
+      title: "Choose a template",
+      optional: true,
+      render: ({ template, applyTemplate, isNarrow }) => (
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ opacity: 0.85, fontSize: 13, lineHeight: 1.4 }}>
+            Optional: start from a preset for faster setup.
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => applyTemplate("rst")}
+              style={pillStyle(template === "rst")}
+            >
+              RST
+            </button>
+            <button
+              onClick={() => applyTemplate("travel")}
+              style={pillStyle(template === "travel")}
+            >
+              Travel
+            </button>
+            <button
+              onClick={() => applyTemplate("event")}
+              style={pillStyle(template === "event")}
+            >
+              Event
+            </button>
+            <button
+              onClick={() => applyTemplate("estate")}
+              style={pillStyle(template === "estate")}
+            >
+              Estate
+            </button>
+            {!isNarrow && (
+              <button
+                onClick={() => applyTemplate("venue_restaurant")}
+                style={pillStyle(template === "venue_restaurant")}
+              >
+                Venue/Restaurant
+              </button>
+            )}
+            {!isNarrow && (
+              <button
+                onClick={() => applyTemplate("location_generic")}
+                style={pillStyle(template === "location_generic")}
+              >
+                Location
+              </button>
+            )}
+            {isNarrow && (
+              <>
+                <button
+                  onClick={() => applyTemplate("venue_restaurant")}
+                  style={pillStyle(template === "venue_restaurant")}
+                >
+                  Venue
+                </button>
+                <button
+                  onClick={() => applyTemplate("location_generic")}
+                  style={pillStyle(template === "location_generic")}
+                >
+                  Location
+                </button>
+              </>
+            )}
+          </div>
+
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            Tip: you can still edit everything manually on the next steps.
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "core",
+      title: "Core details",
+      render: ({ data, update, field, label, controlBase, formGrid }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={field}>
+            <div style={label}>Detail Name</div>
+            <input
+              style={controlBase}
+              value={data.detailName}
+              onChange={(e) => update("detailName", e.target.value)}
+            />
+          </div>
+
+          <div style={formGrid(2)}>
+            <div style={field}>
+              <div style={label}>Date</div>
+              <input
+                type="date"
+                style={controlBase}
+                value={data.date}
+                onChange={(e) => update("date", e.target.value)}
+              />
+            </div>
+
+            <div style={field}>
+              <div style={label}>Team Lead (AIC)</div>
+              <input
+                style={controlBase}
+                value={data.teamLead}
+                onChange={(e) => update("teamLead", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "location",
+      title: "Location",
+      render: ({ data, update, field, label, controlBase }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={field}>
+            <div style={label}>Venue Name</div>
+            <input
+              style={controlBase}
+              value={data.venueName}
+              onChange={(e) => update("venueName", e.target.value)}
+            />
+          </div>
+
+          <div style={field}>
+            <div style={label}>Address</div>
+            <input
+              style={controlBase}
+              value={data.address}
+              onChange={(e) => update("address", e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "times",
+      title: "Times",
+      render: ({ data, update, field, label, controlBase, formGrid }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={formGrid(2)}>
+            <div style={field}>
+              <div style={label}>On Time</div>
+              <input
+                type="time"
+                style={controlBase}
+                value={data.timeOn}
+                onChange={(e) => update("timeOn", e.target.value)}
+              />
+            </div>
+            <div style={field}>
+              <div style={label}>Off Time</div>
+              <input
+                type="time"
+                style={controlBase}
+                value={data.timeOff}
+                onChange={(e) => update("timeOff", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div style={formGrid(2)}>
+            <div style={field}>
+              <div style={label}>Arrival (optional)</div>
+              <input
+                type="time"
+                style={controlBase}
+                value={data.arrivalTime || ""}
+                onChange={(e) => update("arrivalTime", e.target.value)}
+              />
+            </div>
+            <div style={field}>
+              <div style={label}>Departure (optional)</div>
+              <input
+                type="time"
+                style={controlBase}
+                value={data.departTime || ""}
+                onChange={(e) => update("departTime", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "dropPoints",
+      title: "Drop points (pins / locations)",
+      optional: true,
+      render: ({ data, update, field, label, controlBase, formGrid }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.4 }}>
+            Optional. Keep these short (cross streets, landmarks, GPS pins).
+          </div>
+
+          <div style={formGrid(2)}>
+            <div style={field}>
+              <div style={label}>Alpha Arrival (Main)</div>
+              <input
+                style={controlBase}
+                value={data.alphaArrival || ""}
+                onChange={(e) => update("alphaArrival", e.target.value)}
+                placeholder="Gate A, valet, cross-street..."
+              />
+            </div>
+            <div style={field}>
+              <div style={label}>Alpha Departure (Main)</div>
+              <input
+                style={controlBase}
+                value={data.alphaDeparture || ""}
+                onChange={(e) => update("alphaDeparture", e.target.value)}
+                placeholder="Loading bay, rear exit..."
+              />
+            </div>
+          </div>
+
+          <div style={formGrid(2)}>
+            <div style={field}>
+              <div style={label}>Bravo Arrival (Alt)</div>
+              <input
+                style={controlBase}
+                value={data.bravoArrival || ""}
+                onChange={(e) => update("bravoArrival", e.target.value)}
+                placeholder="Secondary curb, staging..."
+              />
+            </div>
+            <div style={field}>
+              <div style={label}>Bravo Departure (Alt)</div>
+              <input
+                style={controlBase}
+                value={data.bravoDeparture || ""}
+                onChange={(e) => update("bravoDeparture", e.target.value)}
+                placeholder="Alternate pickup..."
+              />
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "agents",
+      title: "Agents",
+      optional: true,
+      render: ({
+        data,
+        updateAgent,
+        addAgent,
+        removeAgent,
+        controlSmall,
+        formGrid,
+      }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.8 }}>
+              Optional. Add as many as you want.
+            </div>
+            <button
+              onClick={addAgent}
+              style={{
+                ...lightButtonStyle(),
+                padding: "8px 10px",
+                fontSize: 12,
+              }}
+            >
+              + Add
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {data.agents.map((a, idx) => (
+              <div
+                key={idx}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(0,0,0,0.15)",
+                }}
+              >
+                <div style={formGrid(2)}>
+                  <input
+                    placeholder="Name"
+                    style={controlSmall}
+                    value={a.name}
+                    onChange={(e) => updateAgent(idx, { name: e.target.value })}
+                  />
+                  <input
+                    placeholder="Role"
+                    style={controlSmall}
+                    value={a.role}
+                    onChange={(e) => updateAgent(idx, { role: e.target.value })}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0,1fr) auto",
+                    gap: 8,
+                    marginTop: 8,
+                    alignItems: "stretch",
+                    minWidth: 0,
+                  }}
+                >
+                  <input
+                    placeholder="Phone (optional)"
+                    style={controlSmall}
+                    value={a.phone || ""}
+                    onChange={(e) =>
+                      updateAgent(idx, { phone: e.target.value })
+                    }
+                  />
+                  <button
+                    onClick={() => removeAgent(idx)}
+                    style={{
+                      ...lightButtonStyle(),
+                      padding: "8px 10px",
+                      fontSize: 12,
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "comms",
+      title: "Comms",
+      optional: true,
+      render: ({ data, update, controlBase }) => (
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            placeholder="Primary comms"
+            style={controlBase}
+            value={data.primaryComms || ""}
+            onChange={(e) => update("primaryComms", e.target.value)}
+          />
+          <input
+            placeholder="Secondary comms"
+            style={controlBase}
+            value={data.secondaryComms || ""}
+            onChange={(e) => update("secondaryComms", e.target.value)}
+          />
+          <input
+            placeholder="Code Words / Challenge Phrases"
+            style={controlBase}
+            value={data.codeWords || ""}
+            onChange={(e) => update("codeWords", e.target.value)}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "medical",
+      title: "Medical",
+      optional: true,
+      render: ({ data, update, controlBase }) => (
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            placeholder="Nearest ER name"
+            style={controlBase}
+            value={data.erName || ""}
+            onChange={(e) => update("erName", e.target.value)}
+          />
+          <input
+            placeholder="ER address"
+            style={controlBase}
+            value={data.erAddress || ""}
+            onChange={(e) => update("erAddress", e.target.value)}
+          />
+          <input
+            placeholder="ER phone (optional)"
+            style={controlBase}
+            value={data.erPhone || ""}
+            onChange={(e) => update("erPhone", e.target.value)}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "law",
+      title: "Nearest Sheriff / Police",
+      optional: true,
+      render: ({ data, update, controlBase }) => (
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            placeholder="Sheriff/PD name"
+            style={controlBase}
+            value={data.leName || ""}
+            onChange={(e) => update("leName", e.target.value)}
+          />
+          <input
+            placeholder="Sheriff/PD address"
+            style={controlBase}
+            value={data.leAddress || ""}
+            onChange={(e) => update("leAddress", e.target.value)}
+          />
+          <input
+            placeholder="Sheriff/PD phone (optional)"
+            style={controlBase}
+            value={data.lePhone || ""}
+            onChange={(e) => update("lePhone", e.target.value)}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "pocs",
+      title: "POCs",
+      optional: true,
+      render: ({
+        data,
+        updatePoc,
+        addPoc,
+        removePoc,
+        controlSmall,
+        formGrid,
+      }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.8 }}>
+              Optional contacts for the op.
+            </div>
+            <button
+              onClick={addPoc}
+              style={{
+                ...lightButtonStyle(),
+                padding: "8px 10px",
+                fontSize: 12,
+              }}
+            >
+              + Add
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {data.pocs.map((p, idx) => (
+              <div
+                key={idx}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(0,0,0,0.15)",
+                }}
+              >
+                <div style={formGrid(2)}>
+                  <input
+                    placeholder="Name"
+                    style={controlSmall}
+                    value={p.name}
+                    onChange={(e) => updatePoc(idx, { name: e.target.value })}
+                  />
+                  <input
+                    placeholder="Role / Org"
+                    style={controlSmall}
+                    value={p.roleOrg || ""}
+                    onChange={(e) =>
+                      updatePoc(idx, { roleOrg: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0,1fr) auto",
+                    gap: 8,
+                    marginTop: 8,
+                    minWidth: 0,
+                  }}
+                >
+                  <input
+                    placeholder="Phone (optional)"
+                    style={controlSmall}
+                    value={p.phone || ""}
+                    onChange={(e) => updatePoc(idx, { phone: e.target.value })}
+                  />
+                  <button
+                    onClick={() => removePoc(idx)}
+                    style={{
+                      ...lightButtonStyle(),
+                      padding: "8px 10px",
+                      fontSize: 12,
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <textarea
+                  placeholder="Notes (optional)"
+                  style={{
+                    ...controlSmall,
+                    minHeight: 80,
+                    resize: "vertical",
+                    marginTop: 8,
+                  }}
+                  value={p.notes || ""}
+                  onChange={(e) => updatePoc(idx, { notes: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "bolos",
+      title: "BOLOs / POIs",
+      optional: true,
+      render: ({
+        data,
+        updateBoloPoi,
+        addBolo,
+        removeBoloPoi,
+        controlSmall,
+        formGrid,
+        isInputsStack,
+      }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.8 }}>
+              Optional. Keep brief for 1-page export.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                onClick={() => addBolo("BOLO")}
+                style={{
+                  ...lightButtonStyle(),
+                  padding: "8px 10px",
+                  fontSize: 12,
+                }}
+              >
+                + BOLO
+              </button>
+              <button
+                onClick={() => addBolo("POI")}
+                style={{
+                  ...lightButtonStyle(),
+                  padding: "8px 10px",
+                  fontSize: 12,
+                }}
+              >
+                + POI
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {data.boloPois.map((b, idx) => (
+              <div
+                key={idx}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(0,0,0,0.15)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isInputsStack
+                      ? "1fr"
+                      : "140px minmax(0,1fr)",
+                    gap: 8,
+                    minWidth: 0,
+                  }}
+                >
+                  <select
+                    style={controlSmall}
+                    value={b.type}
+                    onChange={(e) =>
+                      updateBoloPoi(idx, {
+                        type: e.target.value as "BOLO" | "POI",
+                      })
+                    }
+                  >
+                    <option value="BOLO">BOLO</option>
+                    <option value="POI">POI</option>
+                  </select>
+                  <input
+                    placeholder="Subject (person/vehicle/topic)"
+                    style={controlSmall}
+                    value={b.subject}
+                    onChange={(e) =>
+                      updateBoloPoi(idx, { subject: e.target.value })
+                    }
+                  />
+                </div>
+
+                <textarea
+                  placeholder="Description (optional)"
+                  style={{
+                    ...controlSmall,
+                    minHeight: 70,
+                    resize: "vertical",
+                    marginTop: 8,
+                  }}
+                  value={b.description || ""}
+                  onChange={(e) =>
+                    updateBoloPoi(idx, { description: e.target.value })
+                  }
+                />
+
+                <div style={{ ...formGrid(2), marginTop: 8 }}>
+                  <input
+                    placeholder="Last known (optional)"
+                    style={controlSmall}
+                    value={b.lastKnown || ""}
+                    onChange={(e) =>
+                      updateBoloPoi(idx, { lastKnown: e.target.value })
+                    }
+                  />
+                  <input
+                    placeholder="Action (optional)"
+                    style={controlSmall}
+                    value={b.action || ""}
+                    onChange={(e) =>
+                      updateBoloPoi(idx, { action: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    marginTop: 8,
+                  }}
+                >
+                  <button
+                    onClick={() => removeBoloPoi(idx)}
+                    style={{
+                      ...lightButtonStyle(),
+                      padding: "8px 10px",
+                      fontSize: 12,
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "notes",
+      title: "Notes",
+      optional: true,
+      render: ({ data, update, controlBase }) => (
+        <div style={{ display: "grid", gap: 10 }}>
+          <textarea
+            style={{ ...controlBase, minHeight: 160, resize: "vertical" }}
+            value={data.notes || ""}
+            onChange={(e) => update("notes", e.target.value)}
+            placeholder="Anything important for the team..."
+          />
+        </div>
+      ),
+    },
+    {
+      id: "finish",
+      title: "Finish & Export",
+      render: ({ isNarrow }) => (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
+            You’re ready. Review the preview on the right (or below on mobile),
+            then export.
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={handleExport} style={darkButtonStyle()}>
+              Export PDF
+            </button>
+
+            {!isNarrow && (
+              <button
+                onClick={() => setFitOnePage((p) => !p)}
+                style={pillStyle(fitOnePage)}
+                title="Auto-fit export to one page when possible"
+              >
+                {fitOnePage ? "1-Page Fit: ON" : "1-Page Fit: OFF"}
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Tip: if the PDF feels tight, shorten notes/BOLO text or disable
+            1-page fit (desktop).
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  const totalSteps = steps.length;
+  const step = steps[stepIndex];
+
+  function goNext() {
+    if (stepIndex >= totalSteps - 1) return;
+    setSlideDir("next");
+    setAnimKey((k) => k + 1);
+    setStepIndex((i) => i + 1);
+  }
+
+  function goPrev() {
+    if (stepIndex <= 0) return;
+    setSlideDir("prev");
+    setAnimKey((k) => k + 1);
+    setStepIndex((i) => i - 1);
+  }
+
+  function skipStep() {
+    goNext();
+  }
+
+  // === Styles for wizard card animations ===
+  const stepCardClass =
+    slideDir === "next" ? "wizardCard wizardNext" : "wizardCard wizardPrev";
 
   return (
     <div
@@ -492,254 +1316,135 @@ export default function App() {
         color: "rgba(255,255,255,0.92)",
       }}
     >
-      {/* ✅ Stability CSS: single scroll container + remove blur + isolate painting */}
       <style>{`
         * { box-sizing: border-box; }
         input, select, textarea { box-sizing: border-box; }
         html, body, #root { height: 100%; }
-        body { margin: 0; overflow: hidden; } /* ✅ ONE scroll container only */
+        body { margin: 0; overflow: hidden; }
         .appShell { height: 100%; display: flex; flex-direction: column; }
         .appScroll {
           flex: 1;
           overflow: auto;
           -webkit-overflow-scrolling: touch;
-          contain: layout paint;      /* ✅ prevents repaint bleed */
-          isolation: isolate;         /* ✅ prevents layer blending smear */
+          contain: layout paint;
+          isolation: isolate;
         }
         .panel {
           border: 1px solid rgba(255,255,255,0.10);
           background: rgba(0,0,0,0.28);
           border-radius: 16px;
         }
+
+        /* Wizard transitions */
+        .wizardStage {
+          position: relative;
+          overflow: hidden;
+        }
+        .wizardCard {
+          will-change: transform, opacity;
+          animation-duration: 240ms;
+          animation-timing-function: cubic-bezier(.2,.8,.2,1);
+          animation-fill-mode: both;
+        }
+        @keyframes slideInNext {
+          from { transform: translateX(18px); opacity: 0; }
+          to   { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInPrev {
+          from { transform: translateX(-18px); opacity: 0; }
+          to   { transform: translateX(0); opacity: 1; }
+        }
+        .wizardNext { animation-name: slideInNext; }
+        .wizardPrev { animation-name: slideInPrev; }
       `}</style>
 
       <div className="appShell">
-        {/* Top bar (NO backdrop-filter blur — fixes mac GPU “smear”) */}
+        {/* Top bar */}
         <div
-  style={{
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-    background: "rgba(20,20,20,0.94)", // ✅ solid glass vibe, no blur
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
-  }}
->
-  <div
-    style={{
-      width: "100%",
-      maxWidth: "1600px",
-      margin: "0 auto",
-      padding: isNarrow ? "10px 12px" : "14px 16px", // ✅ tighter on mobile
-      display: "flex",
-      gap: 10,
-      alignItems: "center",
-      justifyContent: "space-between",
-      flexWrap: "wrap",
-    }}
-  >
-    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      <img
-        src={radenLogo}
-        alt="Raden logo"
-        style={{
-          width: isNarrow ? 36 : 44,
-          height: isNarrow ? 36 : 44,
-          borderRadius: 12,
-          objectFit: "cover",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.06)",
-        }}
-      />
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ fontWeight: 900, fontSize: isNarrow ? 14 : 16 }}>
-          {APP_NAME}
-        </div>
-
-        {/* Hide subtitle on mobile */}
-        {!isNarrow && (
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Web-first MVP • autosaves locally • shareable presets
-          </div>
-        )}
-      </div>
-    </div>
-
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center",
-        flexWrap: "wrap",
-      }}
-    >
-      <button onClick={handleNew} style={lightButtonStyle()}>
-        New
-      </button>
-
-      <button onClick={handleExport} style={darkButtonStyle()}>
-        Export PDF
-      </button>
-
-      {/* Desktop only */}
-      {!isNarrow && (
-        <button
-          onClick={handleCopyLink}
-          style={lightButtonStyle()}
-          title="Copies a share link (template + redact)"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+            background: "rgba(20,20,20,0.94)",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+          }}
         >
-          Copy Share Link
-        </button>
-      )}
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "1600px",
+              margin: "0 auto",
+              padding: isNarrow ? "10px 12px" : "14px 16px",
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <img
+                src={radenLogo}
+                alt="Raden logo"
+                style={{
+                  width: isNarrow ? 36 : 44,
+                  height: isNarrow ? 36 : 44,
+                  borderRadius: 12,
+                  objectFit: "cover",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                }}
+              />
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ fontWeight: 900, fontSize: isNarrow ? 14 : 16 }}>
+                  {APP_NAME}
+                </div>
+                {!isNarrow && (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    Wizard flow • autosaves locally • cleaner mobile experience
+                  </div>
+                )}
+              </div>
+            </div>
 
-      <button
-        onClick={toggleRedaction}
-        style={pillStyle(redactMode)}
-        title="Hide phones/addresses/last-known in preview + export"
-      >
-        {redactMode ? "Redaction: ON" : "Redaction: OFF"}
-      </button>
-
-      {/* Desktop only */}
-      {!isNarrow && (
-        <button
-          onClick={() => setFitOnePage((p) => !p)}
-          style={pillStyle(fitOnePage)}
-          title="Auto-fit export to one page when possible"
-        >
-          {fitOnePage ? "1-Page Fit: ON" : "1-Page Fit: OFF"}
-        </button>
-      )}
-    </div>
-  </div>
-
-  {/* Template bar — Desktop only */}
-  {!isNarrow && (
-    <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "1600px",
-          margin: "0 auto",
-          padding: "10px 16px",
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
-          Templates:
-        </div>
-
-        <button
-          onClick={() => applyTemplate("rst")}
-          style={pillStyle(template === "rst")}
-        >
-          RST
-        </button>
-        <button
-          onClick={() => applyTemplate("travel")}
-          style={pillStyle(template === "travel")}
-        >
-          Travel
-        </button>
-        <button
-          onClick={() => applyTemplate("event")}
-          style={pillStyle(template === "event")}
-        >
-          Event
-        </button>
-        <button
-          onClick={() => applyTemplate("estate")}
-          style={pillStyle(template === "estate")}
-        >
-          Estate
-        </button>
-        <button
-          onClick={() => applyTemplate("venue_restaurant")}
-          style={pillStyle(template === "venue_restaurant")}
-        >
-          Venue/Restaurant
-        </button>
-        <button
-          onClick={() => applyTemplate("location_generic")}
-          style={pillStyle(template === "location_generic")}
-        >
-          Location
-        </button>
-
-        <div style={{ fontSize: 12, opacity: 0.7, marginLeft: 8 }}>
-          Share link includes <b>template</b> (and optional <b>redaction</b>).
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-
-          {/* Template bar */}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
             <div
               style={{
-                width: "100%",
-                maxWidth: "1600px",
-                margin: "0 auto",
-                padding: "10px 16px",
                 display: "flex",
-                gap: 8,
+                gap: 10,
                 alignItems: "center",
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
-                Templates:
-              </div>
-
-              <button
-                onClick={() => applyTemplate("rst")}
-                style={pillStyle(template === "rst")}
-              >
-                RST
-              </button>
-              <button
-                onClick={() => applyTemplate("travel")}
-                style={pillStyle(template === "travel")}
-              >
-                Travel
-              </button>
-              <button
-                onClick={() => applyTemplate("event")}
-                style={pillStyle(template === "event")}
-              >
-                Event
-              </button>
-              <button
-                onClick={() => applyTemplate("estate")}
-                style={pillStyle(template === "estate")}
-              >
-                Estate
-              </button>
-              <button
-                onClick={() => applyTemplate("venue_restaurant")}
-                style={pillStyle(template === "venue_restaurant")}
-              >
-                Venue/Restaurant
-              </button>
-              <button
-                onClick={() => applyTemplate("location_generic")}
-                style={pillStyle(template === "location_generic")}
-              >
-                Location
+              <button onClick={handleNew} style={lightButtonStyle()}>
+                New
               </button>
 
-              <div style={{ fontSize: 12, opacity: 0.7, marginLeft: 8 }}>
-                Share link includes <b>template</b> (and optional{" "}
-                <b>redaction</b>).
-              </div>
+              {/* keep export visible */}
+              <button onClick={handleExport} style={darkButtonStyle()}>
+                Export PDF
+              </button>
+
+              {!isNarrow && (
+                <button
+                  onClick={handleCopyLink}
+                  style={lightButtonStyle()}
+                  title="Copies a share link (template + redact)"
+                >
+                  Copy Share Link
+                </button>
+              )}
+
+              <button
+                onClick={toggleRedaction}
+                style={pillStyle(redactMode)}
+                title="Hide phones/addresses/last-known in preview + export"
+              >
+                {redactMode ? "Redaction: ON" : "Redaction: OFF"}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* ✅ SINGLE scroll container (prevents the “DOM smear / duplicate text” artifact) */}
         <div className="appScroll">
           <div
             style={{
@@ -756,586 +1461,125 @@ export default function App() {
                 alignItems: "start",
                 gridTemplateColumns: isNarrow
                   ? "1fr"
-                  : "minmax(320px, 440px) minmax(0, 1fr)",
+                  : "minmax(320px, 460px) minmax(0, 1fr)",
               }}
             >
-              {/* FORM */}
+              {/* WIZARD FORM */}
               <div className="panel" style={{ padding: 14 }}>
-                <h2
-                  style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 900 }}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                  }}
                 >
-                  Inputs
-                </h2>
-
-                <div style={{ display: "grid", gap: 12 }}>
-                  <div style={field}>
-                    <div style={label}>Detail Name</div>
-                    <input
-                      style={controlBase}
-                      value={data.detailName}
-                      onChange={(e) => update("detailName", e.target.value)}
-                    />
+                  <div style={{ fontSize: 14, fontWeight: 900 }}>
+                    Step {stepIndex + 1} of {totalSteps}
                   </div>
-
-                  <div style={formGrid(2)}>
-                    <div style={field}>
-                      <div style={label}>Date</div>
-                      <input
-                        type="date"
-                        style={controlBase}
-                        value={data.date}
-                        onChange={(e) => update("date", e.target.value)}
-                      />
-                    </div>
-                    <div style={field}>
-                      <div style={label}>Team Lead(AIC)</div>
-                      <input
-                        style={controlBase}
-                        value={data.teamLead}
-                        onChange={(e) => update("teamLead", e.target.value)}
-                      />
-                    </div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {Math.round(((stepIndex + 1) / totalSteps) * 100)}%
                   </div>
+                </div>
 
-                  <div style={field}>
-                    <div style={label}>Venue Name</div>
-                    <input
-                      style={controlBase}
-                      value={data.venueName}
-                      onChange={(e) => update("venueName", e.target.value)}
-                    />
+                <div style={{ marginTop: 10, fontSize: 16, fontWeight: 900 }}>
+                  {step.title}
+                  {step.optional ? (
+                    <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 8 }}>
+                      (optional)
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Progress bar */}
+                <div
+                  style={{
+                    marginTop: 10,
+                    height: 8,
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${((stepIndex + 1) / totalSteps) * 100}%`,
+                      height: "100%",
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.75)",
+                    }}
+                  />
+                </div>
+
+                <div style={{ height: 14 }} />
+
+                {/* Animated step content */}
+                <div className="wizardStage">
+                  <div
+                    key={animKey}
+                    className={stepCardClass}
+                    style={{ display: "grid", gap: 12 }}
+                  >
+                    {step.render(ctx)}
                   </div>
+                </div>
 
-                  <div style={field}>
-                    <div style={label}>Address</div>
-                    <input
-                      style={controlBase}
-                      value={data.address}
-                      onChange={(e) => update("address", e.target.value)}
-                    />
-                  </div>
+                <div style={{ height: 14 }} />
 
-                  <div style={formGrid(2)}>
-                    <div style={field}>
-                      <div style={label}>On Time</div>
-                      <input
-                        type="time"
-                        style={controlBase}
-                        value={data.timeOn}
-                        onChange={(e) => update("timeOn", e.target.value)}
-                      />
-                    </div>
-                    <div style={field}>
-                      <div style={label}>Off Time</div>
-                      <input
-                        type="time"
-                        style={controlBase}
-                        value={data.timeOff}
-                        onChange={(e) => update("timeOff", e.target.value)}
-                      />
-                    </div>
-                  </div>
+                {/* Nav buttons */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={goPrev}
+                    style={{
+                      ...lightButtonStyle(),
+                      opacity: stepIndex === 0 ? 0.5 : 1,
+                    }}
+                    disabled={stepIndex === 0}
+                  >
+                    ← Back
+                  </button>
 
-                  <div style={formGrid(2)}>
-                    <div style={field}>
-                      <div style={label}>Arrival (optional)</div>
-                      <input
-                        type="time"
-                        style={controlBase}
-                        value={data.arrivalTime || ""}
-                        onChange={(e) => update("arrivalTime", e.target.value)}
-                      />
-                    </div>
-                    <div style={field}>
-                      <div style={label}>Departure (optional)</div>
-                      <input
-                        type="time"
-                        style={controlBase}
-                        value={data.departTime || ""}
-                        onChange={(e) => update("departTime", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* ✅ Drop Points */}
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ ...label, fontSize: 13 }}>
-                      Drop Points (Pins / Locations)
-                    </div>
-
-                    <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
-                      <div style={formGrid(2)}>
-                        <div style={field}>
-                          <div style={label}>Alpha Arrival (Main)</div>
-                          <input
-                            style={controlBase}
-                            placeholder="e.g., Gate A, Valet, GPS pin, cross-street"
-                            value={data.alphaArrival || ""}
-                            onChange={(e) =>
-                              update("alphaArrival", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div style={field}>
-                          <div style={label}>Alpha Departure (Main)</div>
-                          <input
-                            style={controlBase}
-                            placeholder="e.g., Loading bay, rear exit, GPS pin"
-                            value={data.alphaDeparture || ""}
-                            onChange={(e) =>
-                              update("alphaDeparture", e.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div style={formGrid(2)}>
-                        <div style={field}>
-                          <div style={label}>Bravo Arrival (Alt)</div>
-                          <input
-                            style={controlBase}
-                            placeholder="e.g., Secondary entry, alternate curb, GPS pin"
-                            value={data.bravoArrival || ""}
-                            onChange={(e) =>
-                              update("bravoArrival", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div style={field}>
-                          <div style={label}>Bravo Departure (Alt)</div>
-                          <input
-                            style={controlBase}
-                            placeholder="e.g., Alternate route pickup, staging point"
-                            value={data.bravoDeparture || ""}
-                            onChange={(e) =>
-                              update("bravoDeparture", e.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Agents */}
-                  <div style={{ marginTop: 4 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div style={{ ...label, fontSize: 13 }}>Agents</div>
-                      <button
-                        onClick={addAgent}
-                        style={{
-                          ...lightButtonStyle(),
-                          padding: "8px 10px",
-                          fontSize: 12,
-                        }}
-                      >
-                        + Add
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    {step.optional && stepIndex < totalSteps - 1 && (
+                      <button onClick={skipStep} style={lightButtonStyle()}>
+                        Skip
                       </button>
-                    </div>
+                    )}
 
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {data.agents.map((a, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.10)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "rgba(0,0,0,0.15)",
-                          }}
-                        >
-                          <div style={formGrid(2)}>
-                            <input
-                              placeholder="Name"
-                              style={controlSmall}
-                              value={a.name}
-                              onChange={(e) =>
-                                updateAgent(idx, { name: e.target.value })
-                              }
-                            />
-                            <input
-                              placeholder="Role"
-                              style={controlSmall}
-                              value={a.role}
-                              onChange={(e) =>
-                                updateAgent(idx, { role: e.target.value })
-                              }
-                            />
-                          </div>
-
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "minmax(0,1fr) auto",
-                              gap: 8,
-                              marginTop: 8,
-                              alignItems: "stretch",
-                              minWidth: 0,
-                            }}
-                          >
-                            <input
-                              placeholder="Phone (optional)"
-                              style={controlSmall}
-                              value={a.phone || ""}
-                              onChange={(e) =>
-                                updateAgent(idx, { phone: e.target.value })
-                              }
-                            />
-                            <button
-                              onClick={() => removeAgent(idx)}
-                              style={{
-                                ...lightButtonStyle(),
-                                padding: "8px 10px",
-                                fontSize: 12,
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Comms */}
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ ...label, fontSize: 13 }}>Comms</div>
-                    <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
-                      <input
-                        placeholder="Primary comms"
-                        style={controlBase}
-                        value={data.primaryComms || ""}
-                        onChange={(e) => update("primaryComms", e.target.value)}
-                      />
-                      <input
-                        placeholder="Secondary comms"
-                        style={controlBase}
-                        value={data.secondaryComms || ""}
-                        onChange={(e) =>
-                          update("secondaryComms", e.target.value)
-                        }
-                      />
-                      <input
-                        placeholder="Code Words / Challenge Phrases"
-                        style={controlBase}
-                        value={data.codeWords || ""}
-                        onChange={(e) => update("codeWords", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Medical */}
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ ...label, fontSize: 13 }}>Medical</div>
-                    <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
-                      <input
-                        placeholder="Nearest ER name"
-                        style={controlBase}
-                        value={data.erName || ""}
-                        onChange={(e) => update("erName", e.target.value)}
-                      />
-                      <input
-                        placeholder="ER address"
-                        style={controlBase}
-                        value={data.erAddress || ""}
-                        onChange={(e) => update("erAddress", e.target.value)}
-                      />
-                      <input
-                        placeholder="ER phone (optional)"
-                        style={controlBase}
-                        value={data.erPhone || ""}
-                        onChange={(e) => update("erPhone", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Law Enforcement */}
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ ...label, fontSize: 13 }}>
-                      Nearest Sheriff / Police
-                    </div>
-                    <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
-                      <input
-                        placeholder="Sheriff/PD name"
-                        style={controlBase}
-                        value={data.leName || ""}
-                        onChange={(e) => update("leName", e.target.value)}
-                      />
-                      <input
-                        placeholder="Sheriff/PD address"
-                        style={controlBase}
-                        value={data.leAddress || ""}
-                        onChange={(e) => update("leAddress", e.target.value)}
-                      />
-                      <input
-                        placeholder="Sheriff/PD phone (optional)"
-                        style={controlBase}
-                        value={data.lePhone || ""}
-                        onChange={(e) => update("lePhone", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* POCs */}
-                  <div style={{ marginTop: 4 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div style={{ ...label, fontSize: 13 }}>POCs</div>
-                      <button
-                        onClick={addPoc}
-                        style={{
-                          ...lightButtonStyle(),
-                          padding: "8px 10px",
-                          fontSize: 12,
-                        }}
-                      >
-                        + Add
+                    {stepIndex < totalSteps - 1 ? (
+                      <button onClick={goNext} style={darkButtonStyle()}>
+                        Next →
                       </button>
-                    </div>
-
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {data.pocs.map((p, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.10)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "rgba(0,0,0,0.15)",
-                          }}
-                        >
-                          <div style={formGrid(2)}>
-                            <input
-                              placeholder="Name"
-                              style={controlSmall}
-                              value={p.name}
-                              onChange={(e) =>
-                                updatePoc(idx, { name: e.target.value })
-                              }
-                            />
-                            <input
-                              placeholder="Role / Org"
-                              style={controlSmall}
-                              value={p.roleOrg || ""}
-                              onChange={(e) =>
-                                updatePoc(idx, { roleOrg: e.target.value })
-                              }
-                            />
-                          </div>
-
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "minmax(0,1fr) auto",
-                              gap: 8,
-                              marginTop: 8,
-                              minWidth: 0,
-                            }}
-                          >
-                            <input
-                              placeholder="Phone (optional)"
-                              style={controlSmall}
-                              value={p.phone || ""}
-                              onChange={(e) =>
-                                updatePoc(idx, { phone: e.target.value })
-                              }
-                            />
-                            <button
-                              onClick={() => removePoc(idx)}
-                              style={{
-                                ...lightButtonStyle(),
-                                padding: "8px 10px",
-                                fontSize: 12,
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-
-                          <textarea
-                            placeholder="Notes (optional)"
-                            style={{
-                              ...controlSmall,
-                              minHeight: 70,
-                              resize: "vertical",
-                              marginTop: 8,
-                            }}
-                            value={p.notes || ""}
-                            onChange={(e) =>
-                              updatePoc(idx, { notes: e.target.value })
-                            }
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    ) : (
+                      <button onClick={handleExport} style={darkButtonStyle()}>
+                        Export PDF
+                      </button>
+                    )}
                   </div>
+                </div>
 
-                  {/* BOLOs / POIs */}
-                  <div style={{ marginTop: 4 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div style={{ ...label, fontSize: 13 }}>BOLOs / POIs</div>
-                      <div
-                        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-                      >
-                        <button
-                          onClick={() => addBolo("BOLO")}
-                          style={{
-                            ...lightButtonStyle(),
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                        >
-                          + BOLO
-                        </button>
-                        <button
-                          onClick={() => addBolo("POI")}
-                          style={{
-                            ...lightButtonStyle(),
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                        >
-                          + POI
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {data.boloPois.map((b, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.10)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "rgba(0,0,0,0.15)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: isInputsStack
-                                ? "1fr"
-                                : "140px minmax(0,1fr)",
-                              gap: 8,
-                              minWidth: 0,
-                            }}
-                          >
-                            <select
-                              style={controlSmall}
-                              value={b.type}
-                              onChange={(e) =>
-                                updateBoloPoi(idx, {
-                                  type: e.target.value as "BOLO" | "POI",
-                                })
-                              }
-                            >
-                              <option value="BOLO">BOLO</option>
-                              <option value="POI">POI</option>
-                            </select>
-                            <input
-                              placeholder="Subject (person/vehicle/topic)"
-                              style={controlSmall}
-                              value={b.subject}
-                              onChange={(e) =>
-                                updateBoloPoi(idx, { subject: e.target.value })
-                              }
-                            />
-                          </div>
-
-                          <textarea
-                            placeholder="Description (optional)"
-                            style={{
-                              ...controlSmall,
-                              minHeight: 70,
-                              resize: "vertical",
-                              marginTop: 8,
-                            }}
-                            value={b.description || ""}
-                            onChange={(e) =>
-                              updateBoloPoi(idx, {
-                                description: e.target.value,
-                              })
-                            }
-                          />
-
-                          <div style={formGrid(2)}>
-                            <input
-                              placeholder="Last known (optional)"
-                              style={controlSmall}
-                              value={b.lastKnown || ""}
-                              onChange={(e) =>
-                                updateBoloPoi(idx, {
-                                  lastKnown: e.target.value,
-                                })
-                              }
-                            />
-                            <input
-                              placeholder="Action (optional)"
-                              style={controlSmall}
-                              value={b.action || ""}
-                              onChange={(e) =>
-                                updateBoloPoi(idx, { action: e.target.value })
-                              }
-                            />
-                          </div>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "flex-end",
-                              marginTop: 8,
-                            }}
-                          >
-                            <button
-                              onClick={() => removeBoloPoi(idx)}
-                              style={{
-                                ...lightButtonStyle(),
-                                padding: "8px 10px",
-                                fontSize: 12,
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Notes */}
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ ...label, fontSize: 13 }}>Notes</div>
-                    <textarea
-                      style={{
-                        ...controlBase,
-                        minHeight: 110,
-                        resize: "vertical",
-                      }}
-                      value={data.notes || ""}
-                      onChange={(e) => update("notes", e.target.value)}
-                      placeholder="Anything important for the team..."
-                    />
-                  </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 12,
+                    opacity: 0.7,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Your progress autosaves locally. Avoid sensitive data. Use
+                  Redaction when needed.
                 </div>
               </div>
 
@@ -1367,9 +1611,8 @@ export default function App() {
                       border: "1px solid rgba(0,0,0,0.12)",
                       borderRadius: 16,
                       padding: 18,
-                      // ✅ Lighter shadow reduces GPU stress in scroll
                       boxShadow: "0 8px 18px rgba(0,0,0,0.10)",
-                      contain: "paint", // ✅ preview paints in its own box
+                      contain: "paint",
                     }}
                   >
                     <style>{`
@@ -1639,8 +1882,7 @@ export default function App() {
                           </div>
 
                           <div style={{ opacity: 0.7, fontSize: 11 }}>
-                            (Pins can be cross-streets, landmarks, or GPS pins.
-                            Keep it brief for 1-page export.)
+                            (Pins can be cross-streets, landmarks, or GPS pins.)
                           </div>
                         </div>
                       </section>
