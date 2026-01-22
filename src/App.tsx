@@ -3,6 +3,7 @@ import type { PocketAdvance, Agent, Poc, BoloPoi } from "./types";
 import { clearAdvance, loadAdvance, saveAdvance } from "./utils/storage";
 import { exportElementToPdf } from "./utils/exportPdf";
 
+
 import radenLogo from "./assets/raden-logo.png";
 
 const APP_NAME = "Raden — The First Pocket Advance Generator";
@@ -240,7 +241,7 @@ type WizardStep = {
   id: string;
   title: string;
   optional?: boolean;
-  render: (ctx: WizardCtx) => JSX.Element;
+  render: (ctx: WizardCtx) => React.ReactNode;
 };
 
 type WizardCtx = {
