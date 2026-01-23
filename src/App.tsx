@@ -700,7 +700,7 @@ export default function App() {
         <div style={{ display: "grid", gap: 12 }}>
           <div style={formGrid(2)}>
             <div style={field}>
-              <div style={label}>On Time</div>
+              <div style={label}>Shift Start</div>
               <input
                 type="time"
                 style={controlBase}
@@ -709,7 +709,7 @@ export default function App() {
               />
             </div>
             <div style={field}>
-              <div style={label}>Off Time</div>
+              <div style={label}>Shift End</div>
               <input
                 type="time"
                 style={controlBase}
@@ -721,7 +721,7 @@ export default function App() {
 
           <div style={formGrid(2)}>
             <div style={field}>
-              <div style={label}>Arrival (optional)</div>
+              <div style={label}>Principle Arrival (optional)</div>
               <input
                 type="time"
                 style={controlBase}
@@ -730,7 +730,7 @@ export default function App() {
               />
             </div>
             <div style={field}>
-              <div style={label}>Departure (optional)</div>
+              <div style={label}>Principle Departure (optional)</div>
               <input
                 type="time"
                 style={controlBase}
