@@ -1,21 +1,20 @@
 import type { PocketAdvance } from "../types";
 import type { RiskBrief } from "./riskBriefTypes";
 
-export async function generateRiskBrief(opts: {
+export async function generateRiskBrief(params: {
   advance: PocketAdvance;
   redactMode: boolean;
 }): Promise<RiskBrief> {
-  const resp = await fetch("/.netlify/functions/risk-brief", {
+  const res = await fetch("/.netlify/functions/risk-brief", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(opts),
+    body: JSON.stringify(params),
   });
 
-  const text = await resp.text();
-
-  if (!resp.ok) {
-    throw new Error(text || "Risk brief failed");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Risk brief request failed");
   }
 
-  return JSON.parse(text) as RiskBrief;
+  return res.json();
 }

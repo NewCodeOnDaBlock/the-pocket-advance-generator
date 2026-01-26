@@ -1,18 +1,22 @@
-export type Agent = { name: string; role: string; phone?: string };
+export type Agent = {
+  name: string;
+  role: string;
+  phone?: string;
+};
 
 export type Poc = {
   name: string;
-  roleOrg: string;
+  roleOrg?: string;
   phone?: string;
   notes?: string;
 };
 
 export type BoloPoi = {
   type: "BOLO" | "POI";
-  subject: string;
-  description?: string;
-  lastKnown?: string;
-  action?: string;
+  subject: string; // person/vehicle/topic
+  description?: string; // details
+  lastKnown?: string; // last known location/time
+  action?: string; // what to do if seen
 };
 
 export type PocketAdvance = {
@@ -28,10 +32,10 @@ export type PocketAdvance = {
   arrivalTime?: string;
   departTime?: string;
 
-  alphaArrival?: string;
-  alphaDeparture?: string;
-  bravoArrival?: string;
-  bravoDeparture?: string;
+  alphaArrival: string;
+  alphaDeparture: string;
+  bravoArrival: string;
+  bravoDeparture: string;
 
   teamLead: string;
   agents: Agent[];
@@ -40,24 +44,21 @@ export type PocketAdvance = {
   secondaryComms?: string;
   codeWords?: string;
 
+  // Medical
   erName?: string;
   erAddress?: string;
   erPhone?: string;
 
-  leName?: string;
+  // Law enforcement
+  leName?: string; // Sheriff/PD
   leAddress?: string;
   lePhone?: string;
 
+  // Points of contact
   pocs: Poc[];
-  boloPois: BoloPoi[];
 
-  // NEW: from Places Details
-  placeId?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  lat?: number;
-  lng?: number;
+  // BOLO/POI list
+  boloPois: BoloPoi[];
 
   notes?: string;
 };

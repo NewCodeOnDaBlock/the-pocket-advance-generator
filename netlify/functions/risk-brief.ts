@@ -6,17 +6,8 @@ type RiskBrief = {
   key_risks: Array<{ title: string; why_it_matters: string }>;
   vulnerabilities: Array<{ title: string; note: string }>;
   mitigations: Array<{ title: string; steps: string }>;
-  movement_constraints: Array<{ title: string; why: string; action: string }>;
-  comms_checks: Array<{ check: string; why: string }>;
-  medical_plan: {
-    primary: string;
-    secondary: string;
-    evac_route_notes: string;
-  };
   go_no_go: { go_if: string[]; no_go_if: string[] };
   missing_info_questions: string[];
-  sources: string[];
-  confidence: "LOW" | "MEDIUM" | "HIGH";
 };
 
 function json(statusCode: number, body: any) {
@@ -32,14 +23,7 @@ function json(statusCode: number, body: any) {
   };
 }
 
-function asString(v: any) {
-  return typeof v === "string" ? v : "";
-}
-function asArray(v: any) {
-  return Array.isArray(v) ? v : [];
-}
-
-function coerce(input: any): RiskBrief {
+function coerceRiskBrief(input: any): RiskBrief {
   const threat: RiskBrief["threat_level"] =
     input?.threat_level === "LOW" ||
     input?.threat_level === "MODERATE" ||
@@ -48,85 +32,56 @@ function coerce(input: any): RiskBrief {
       ? input.threat_level
       : "MODERATE";
 
-  const confidence: RiskBrief["confidence"] =
-    input?.confidence === "LOW" ||
-    input?.confidence === "MEDIUM" ||
-    input?.confidence === "HIGH"
-      ? input.confidence
-      : "MEDIUM";
+  const asArray = (v: any) => (Array.isArray(v) ? v : []);
+  const asString = (v: any) => (typeof v === "string" ? v : "");
+
+  const key_risks = asArray(input?.key_risks)
+    .map((x: any) => ({
+      title: asString(x?.title).slice(0, 140),
+      why_it_matters: asString(x?.why_it_matters).slice(0, 320),
+    }))
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
+
+  const vulnerabilities = asArray(input?.vulnerabilities)
+    .map((x: any) => ({
+      title: asString(x?.title).slice(0, 140),
+      note: asString(x?.note).slice(0, 320),
+    }))
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
+
+  const mitigations = asArray(input?.mitigations)
+    .map((x: any) => ({
+      title: asString(x?.title).slice(0, 140),
+      steps: asString(x?.steps).slice(0, 500),
+    }))
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
+
+  const go_if = asArray(input?.go_no_go?.go_if)
+    .map((x: any) => asString(x).slice(0, 200))
+    .filter((x: string) => x.trim())
+    .slice(0, 6);
+
+  const no_go_if = asArray(input?.go_no_go?.no_go_if)
+    .map((x: any) => asString(x).slice(0, 200))
+    .filter((x: string) => x.trim())
+    .slice(0, 6);
+
+  const missing_info_questions = asArray(input?.missing_info_questions)
+    .map((x: any) => asString(x).slice(0, 220))
+    .filter((x: string) => x.trim())
+    .slice(0, 8);
 
   return {
-    summary: asString(input?.summary).slice(0, 1200),
+    summary: asString(input?.summary).slice(0, 800),
     threat_level: threat,
-    key_risks: asArray(input?.key_risks)
-      .map((x: any) => ({
-        title: asString(x?.title).slice(0, 140),
-        why_it_matters: asString(x?.why_it_matters).slice(0, 360),
-      }))
-      .filter((x: any) => x.title.trim())
-      .slice(0, 8),
-    vulnerabilities: asArray(input?.vulnerabilities)
-      .map((x: any) => ({
-        title: asString(x?.title).slice(0, 140),
-        note: asString(x?.note).slice(0, 360),
-      }))
-      .filter((x: any) => x.title.trim())
-      .slice(0, 8),
-    mitigations: asArray(input?.mitigations)
-      .map((x: any) => ({
-        title: asString(x?.title).slice(0, 140),
-        steps: asString(x?.steps).slice(0, 700),
-      }))
-      .filter((x: any) => x.title.trim())
-      .slice(0, 10),
-
-    movement_constraints: asArray(input?.movement_constraints)
-      .map((x: any) => ({
-        title: asString(x?.title).slice(0, 140),
-        why: asString(x?.why).slice(0, 260),
-        action: asString(x?.action).slice(0, 260),
-      }))
-      .filter((x: any) => x.title.trim())
-      .slice(0, 8),
-
-    comms_checks: asArray(input?.comms_checks)
-      .map((x: any) => ({
-        check: asString(x?.check).slice(0, 160),
-        why: asString(x?.why).slice(0, 260),
-      }))
-      .filter((x: any) => x.check.trim())
-      .slice(0, 8),
-
-    medical_plan: {
-      primary: asString(input?.medical_plan?.primary).slice(0, 220),
-      secondary: asString(input?.medical_plan?.secondary).slice(0, 220),
-      evac_route_notes: asString(input?.medical_plan?.evac_route_notes).slice(
-        0,
-        500
-      ),
-    },
-
-    go_no_go: {
-      go_if: asArray(input?.go_no_go?.go_if)
-        .map((x: any) => asString(x).slice(0, 220))
-        .filter(Boolean)
-        .slice(0, 10),
-      no_go_if: asArray(input?.go_no_go?.no_go_if)
-        .map((x: any) => asString(x).slice(0, 220))
-        .filter(Boolean)
-        .slice(0, 10),
-    },
-
-    missing_info_questions: asArray(input?.missing_info_questions)
-      .map((x: any) => asString(x).slice(0, 220))
-      .filter(Boolean)
-      .slice(0, 12),
-
-    sources: asArray(input?.sources)
-      .map((x: any) => asString(x).slice(0, 240))
-      .filter(Boolean)
-      .slice(0, 12),
-    confidence,
+    key_risks,
+    vulnerabilities,
+    mitigations,
+    go_no_go: { go_if, no_go_if },
+    missing_info_questions,
   };
 }
 
@@ -155,12 +110,14 @@ function redactAdvance(advance: any) {
       phone: a?.phone?.trim() ? "REDACTED" : "",
     }));
   }
+
   if (Array.isArray(clone?.pocs)) {
     clone.pocs = clone.pocs.map((p: any) => ({
       ...p,
       phone: p?.phone?.trim() ? "REDACTED" : "",
     }));
   }
+
   if (Array.isArray(clone?.boloPois)) {
     clone.boloPois = clone.boloPois.map((b: any) => ({
       ...b,
@@ -178,8 +135,12 @@ export const handler: Handler = async (event) => {
       return json(405, { error: "Method not allowed" });
 
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey)
-      return json(500, { error: "Missing OPENAI_API_KEY env var in Netlify." });
+    if (!apiKey) {
+      return json(500, {
+        error:
+          "Missing OPENAI_API_KEY environment variable. Add it in Netlify site settings.",
+      });
+    }
 
     const parsed = event.body ? JSON.parse(event.body) : {};
     const advance = parsed?.advance ?? {};
@@ -188,49 +149,80 @@ export const handler: Handler = async (event) => {
     const inputAdvance = redactMode ? redactAdvance(advance) : advance;
 
     const system = `
-You are an experienced executive protection advance/operations planner.
-Generate a high-value "Risk Brief" that is actionable for a protection team.
-
-Rules:
-- Base everything ONLY on the provided Pocket Advance fields. Do not invent facts, stats, or named threats.
-- If info is missing, state assumptions as assumptions and add questions in missing_info_questions.
-- Use concise, operational language (team brief style).
-- Output must be valid JSON matching the provided schema. No markdown. No extra keys.
-- Include clear mitigations (steps). Avoid vague advice.
-`.trim();
+    You are an experienced executive protection (EP) advance and operations planner.
+    Generate a concise, practical "AI Risk Brief" for the provided Pocket Advance.
+    
+    GOAL
+    - Add operational value beyond summarizing inputs.
+    - Identify actionable planning gaps and mitigation steps.
+    - Keep tone calm, professional, and non-alarmist.
+    
+    NON-NEGOTIABLE RULES
+    - Output MUST be valid JSON that matches the provided schema exactly.
+    - Do NOT invent specific facts, named threats, intel, statistics, or venue-specific policies unless explicitly provided in the input.
+    - Do NOT provide probabilistic claims (e.g., "80% chance") or crime rate claims.
+    - Focus on risk drivers, vulnerabilities, and mitigations that are generic-but-useful given the inputs.
+    - If key information is missing, reflect that via:
+      - planning_confidence and confidence_rationale
+      - missing_info_questions
+      - vulnerabilities and mitigations
+    
+    CONTENT GUIDANCE
+    - threat_level should be grounded in the situation complexity + exposure + missing critical info (not imagined threats).
+    - primary_risk_drivers should explain "why" the threat level is what it is (2–6 bullets).
+    - vulnerabilities must be internal/controllable weaknesses, not external threats (2–8 bullets).
+    - recommended_mitigations must be specific actions the team can do (2–10 bullets). Each mitigation should include steps.
+    - go_no_go should include realistic "go_if" and "no_go_if" conditions.
+    - day_of_operator_focus should be a short, practical list of what to pay attention to day-of (3–6 bullets).
+    - include a short disclaimer that this is a planning aid and does not replace recon, judgment, or real-time decisions.
+    
+    STYLE
+    - Keep bullets tight and operator-friendly.
+    - Avoid long paragraphs.
+    - No markdown. No extra keys. No commentary.
+    `.trim();
 
     const schema = {
       type: "object",
       additionalProperties: false,
       properties: {
         summary: { type: "string" },
+
+        disclaimer: { type: "string" },
+
         threat_level: {
           type: "string",
           enum: ["LOW", "MODERATE", "ELEVATED", "HIGH"],
         },
 
-        key_risks: {
+        primary_risk_drivers: {
+          type: "array",
+          items: { type: "string" },
+        },
+
+        planning_confidence: {
+          type: "string",
+          enum: ["LOW", "MEDIUM", "HIGH"],
+        },
+
+        confidence_rationale: {
+          type: "string",
+        },
+
+        vulnerabilities: {
           type: "array",
           items: {
             type: "object",
             additionalProperties: false,
             properties: {
               title: { type: "string" },
-              why_it_matters: { type: "string" },
+              note: { type: "string" },
             },
-            required: ["title", "why_it_matters"],
-          },
-        },
-        vulnerabilities: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: { title: { type: "string" }, note: { type: "string" } },
             required: ["title", "note"],
           },
         },
-        mitigations: {
+
+        recommended_mitigations: {
           type: "array",
           items: {
             type: "object",
@@ -243,41 +235,6 @@ Rules:
           },
         },
 
-        movement_constraints: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              title: { type: "string" },
-              why: { type: "string" },
-              action: { type: "string" },
-            },
-            required: ["title", "why", "action"],
-          },
-        },
-
-        comms_checks: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: { check: { type: "string" }, why: { type: "string" } },
-            required: ["check", "why"],
-          },
-        },
-
-        medical_plan: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            primary: { type: "string" },
-            secondary: { type: "string" },
-            evac_route_notes: { type: "string" },
-          },
-          required: ["primary", "secondary", "evac_route_notes"],
-        },
-
         go_no_go: {
           type: "object",
           additionalProperties: false,
@@ -288,23 +245,28 @@ Rules:
           required: ["go_if", "no_go_if"],
         },
 
-        missing_info_questions: { type: "array", items: { type: "string" } },
-        sources: { type: "array", items: { type: "string" } },
-        confidence: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+        day_of_operator_focus: {
+          type: "array",
+          items: { type: "string" },
+        },
+
+        missing_info_questions: {
+          type: "array",
+          items: { type: "string" },
+        },
       },
       required: [
         "summary",
+        "disclaimer",
         "threat_level",
-        "key_risks",
+        "primary_risk_drivers",
+        "planning_confidence",
+        "confidence_rationale",
         "vulnerabilities",
-        "mitigations",
-        "movement_constraints",
-        "comms_checks",
-        "medical_plan",
+        "recommended_mitigations",
         "go_no_go",
+        "day_of_operator_focus",
         "missing_info_questions",
-        "sources",
-        "confidence",
       ],
     };
 
@@ -341,11 +303,12 @@ Rules:
       body: JSON.stringify(body),
     });
 
-    const rawText = await resp.text();
-    if (!resp.ok)
-      return json(500, { error: rawText || "OpenAI request failed" });
+    if (!resp.ok) {
+      const msg = await resp.text();
+      return json(500, { error: msg || "OpenAI request failed" });
+    }
 
-    const data = JSON.parse(rawText);
+    const data = await resp.json();
 
     const outputText: string =
       data?.output_text ||
@@ -353,14 +316,14 @@ Rules:
         ?.text ||
       "";
 
-    let parsedOut: any = {};
+    let briefParsed: any = {};
     try {
-      parsedOut = JSON.parse(outputText);
+      briefParsed = JSON.parse(outputText);
     } catch {
-      parsedOut = {};
+      briefParsed = {};
     }
 
-    return json(200, coerce(parsedOut));
+    return json(200, coerceRiskBrief(briefParsed));
   } catch (err: any) {
     return json(500, { error: err?.message || "Unhandled server error" });
   }

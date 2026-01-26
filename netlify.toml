@@ -6,17 +6,19 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# SPA routing
+# SPA routing (prevents 404s on refresh / deep links)
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Security headers (allow inline styles because App uses <style> tags + style={{}})
+# Security headers (balanced: secure + React-safe + AI-safe)
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.netlify.app; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    # Allow inline styles because the app uses style={{}} and <style> tags
+    # Keep scripts locked down to self
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
     Referrer-Policy = "no-referrer"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"

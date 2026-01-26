@@ -1,25 +1,32 @@
 export type RiskBrief = {
   summary: string;
+
+  disclaimer: string;
+
   threat_level: "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
 
-  key_risks: Array<{ title: string; why_it_matters: string }>;
-  vulnerabilities: Array<{ title: string; note: string }>;
-  mitigations: Array<{ title: string; steps: string }>;
+  primary_risk_drivers: string[];
 
-  movement_constraints: Array<{ title: string; why: string; action: string }>;
+  planning_confidence: "LOW" | "MEDIUM" | "HIGH";
 
-  comms_checks: Array<{ check: string; why: string }>;
+  confidence_rationale: string;
 
-  medical_plan: {
-    primary: string;
-    secondary: string;
-    evac_route_notes: string;
+  vulnerabilities: Array<{
+    title: string;
+    note: string;
+  }>;
+
+  recommended_mitigations: Array<{
+    title: string;
+    steps: string;
+  }>;
+
+  go_no_go: {
+    go_if: string[];
+    no_go_if: string[];
   };
 
-  go_no_go: { go_if: string[]; no_go_if: string[] };
+  day_of_operator_focus: string[];
 
   missing_info_questions: string[];
-
-  sources: string[];
-  confidence: "LOW" | "MEDIUM" | "HIGH";
 };
