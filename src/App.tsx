@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PocketAdvance, Agent, Poc, BoloPoi } from "./types";
 import { clearAdvance, loadAdvance, saveAdvance } from "./utils/storage";
 import { exportElementToPdf } from "./utils/exportPdf";
+import { generateRiskBrief } from "./utils/riskBriefClient";
+import type { RiskBrief } from "./utils/riskBriefTypes";
 
 
 import radenLogo from "./assets/raden-logo.png";
@@ -281,6 +283,9 @@ type WizardCtx = {
 };
 
 export default function App() {
+  const [riskBrief, setRiskBrief] = useState<RiskBrief | null>(null);
+  const [riskBriefLoading, setRiskBriefLoading] = useState(false);
+  const [riskBriefErr, setRiskBriefErr] = useState<string | null>(null);
   const [data, setData] = useState<PocketAdvance>(() =>
     loadAdvance({ ...emptyAdvance, date: todayISO() })
   );
@@ -436,6 +441,19 @@ export default function App() {
       setUrlParams({ template, redact: next });
       return next;
     });
+  }
+
+  async function handleGenerateRiskBrief() {
+    setRiskBriefLoading(true);
+    setRiskBriefErr(null);
+    try {
+      const brief = await generateRiskBrief({ advance: data, redactMode });
+      setRiskBrief(brief);
+    } catch (e: any) {
+      setRiskBriefErr(e?.message || "Failed to generate risk brief");
+    } finally {
+      setRiskBriefLoading(false);
+    }
   }
 
   async function handleExport() {
@@ -1427,11 +1445,11 @@ export default function App() {
 
               {!isNarrow && (
                 <button
-                  onClick={handleCopyLink}
+                  onClick={handleGenerateRiskBrief}
                   style={lightButtonStyle()}
-                  title="Copies a share link (template + redact)"
+                  title="Generate an AI Risk Brief from this Pocket Advance"
                 >
-                  Copy Share Link
+                  {riskBriefLoading ? "Generating..." : "AI Risk Brief"}
                 </button>
               )}
 
@@ -2123,6 +2141,44 @@ export default function App() {
                         {data.notes?.trim() ? data.notes : "—"}
                       </div>
                     </section>
+
+                    {riskBriefErr ? (
+                      <div
+                        style={{ marginTop: 12, color: "salmon", fontSize: 12 }}
+                      >
+                        {riskBriefErr}
+                      </div>
+                    ) : null}
+
+                    {riskBrief ? (
+                      <div
+                        className="panel"
+                        style={{
+                          marginTop: 14,
+                          padding: 12,
+                          fontSize: 12,
+                          background: "rgba(0,0,0,0.22)",
+                        }}
+                      >
+                        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+                          AI Risk Brief
+                        </div>
+                        <div
+                          style={{
+                            opacity: 0.9,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          <div>
+                            <b>Threat:</b> {riskBrief.threat_level}
+                          </div>
+                          <div style={{ marginTop: 8 }}>
+                            <b>Summary:</b> {riskBrief.summary}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div
                       style={{

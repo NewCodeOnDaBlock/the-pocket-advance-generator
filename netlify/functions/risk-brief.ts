@@ -1,18 +1,12 @@
 import type { Handler } from "@netlify/functions";
 
-// If you're using TS path aliases in your Vite app, DON'T import app files here.
-// Keep the function self-contained (Netlify bundles functions separately).
-
 type RiskBrief = {
-  summary: string; // 2-4 sentences
+  summary: string;
   threat_level: "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
   key_risks: Array<{ title: string; why_it_matters: string }>;
   vulnerabilities: Array<{ title: string; note: string }>;
   mitigations: Array<{ title: string; steps: string }>;
-  go_no_go: {
-    go_if: string[];
-    no_go_if: string[];
-  };
+  go_no_go: { go_if: string[]; no_go_if: string[] };
   missing_info_questions: string[];
 };
 
@@ -21,6 +15,7 @@ function json(statusCode: number, body: any) {
     statusCode,
     headers: {
       "Content-Type": "application/json",
+      // If you only call this from your own site, you can tighten this later.
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -30,7 +25,6 @@ function json(statusCode: number, body: any) {
 }
 
 function coerceRiskBrief(input: any): RiskBrief {
-  // Minimal runtime validation + safe defaults to prevent UI breakage.
   const threat: RiskBrief["threat_level"] =
     input?.threat_level === "LOW" ||
     input?.threat_level === "MODERATE" ||
@@ -47,52 +41,52 @@ function coerceRiskBrief(input: any): RiskBrief {
       title: asString(x?.title).slice(0, 140),
       why_it_matters: asString(x?.why_it_matters).slice(0, 320),
     }))
-    .filter((x: any) => x.title.trim());
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
 
   const vulnerabilities = asArray(input?.vulnerabilities)
     .map((x: any) => ({
       title: asString(x?.title).slice(0, 140),
       note: asString(x?.note).slice(0, 320),
     }))
-    .filter((x: any) => x.title.trim());
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
 
   const mitigations = asArray(input?.mitigations)
     .map((x: any) => ({
       title: asString(x?.title).slice(0, 140),
       steps: asString(x?.steps).slice(0, 500),
     }))
-    .filter((x: any) => x.title.trim());
+    .filter((x: any) => x.title.trim())
+    .slice(0, 6);
 
   const go_if = asArray(input?.go_no_go?.go_if)
     .map((x: any) => asString(x).slice(0, 200))
-    .filter((x: string) => x.trim());
+    .filter((x: string) => x.trim())
+    .slice(0, 6);
 
   const no_go_if = asArray(input?.go_no_go?.no_go_if)
     .map((x: any) => asString(x).slice(0, 200))
-    .filter((x: string) => x.trim());
+    .filter((x: string) => x.trim())
+    .slice(0, 6);
 
   const missing_info_questions = asArray(input?.missing_info_questions)
     .map((x: any) => asString(x).slice(0, 220))
-    .filter((x: string) => x.trim());
+    .filter((x: string) => x.trim())
+    .slice(0, 8);
 
   return {
     summary: asString(input?.summary).slice(0, 800),
     threat_level: threat,
-    key_risks: key_risks.slice(0, 6),
-    vulnerabilities: vulnerabilities.slice(0, 6),
-    mitigations: mitigations.slice(0, 6),
-    go_no_go: {
-      go_if: go_if.slice(0, 6),
-      no_go_if: no_go_if.slice(0, 6),
-    },
-    missing_info_questions: missing_info_questions.slice(0, 8),
+    key_risks,
+    vulnerabilities,
+    mitigations,
+    go_no_go: { go_if, no_go_if },
+    missing_info_questions,
   };
 }
 
 function redactAdvance(advance: any) {
-  // Optional: your App.tsx already redacts in preview,
-  // but you might want to keep *sensitive fields* out of the model prompt too.
-  // This is a conservative pass that strips likely sensitive fields.
   const clone = JSON.parse(JSON.stringify(advance ?? {}));
 
   const redactKeys = [
@@ -137,13 +131,9 @@ function redactAdvance(advance: any) {
 
 export const handler: Handler = async (event) => {
   try {
-    if (event.httpMethod === "OPTIONS") {
-      return json(200, { ok: true });
-    }
-
-    if (event.httpMethod !== "POST") {
+    if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
+    if (event.httpMethod !== "POST")
       return json(405, { error: "Method not allowed" });
-    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -159,8 +149,6 @@ export const handler: Handler = async (event) => {
 
     const inputAdvance = redactMode ? redactAdvance(advance) : advance;
 
-    // ---- OpenAI request (Responses API) ----
-    // Using a strict JSON response format so your UI always receives RiskBrief.
     const system = `
 You are an experienced executive protection advance/operations planner.
 Create a concise "Risk Brief" for the provided Pocket Advance.
@@ -209,7 +197,10 @@ Hard rules:
           items: {
             type: "object",
             additionalProperties: false,
-            properties: { title: { type: "string" }, steps: { type: "string" } },
+            properties: {
+              title: { type: "string" },
+              steps: { type: "string" },
+            },
             required: ["title", "steps"],
           },
         },
@@ -275,28 +266,21 @@ Hard rules:
 
     const data = await resp.json();
 
-    // The JSON output appears as a string in `output_text` for Responses API.
     const outputText: string =
       data?.output_text ||
       data?.output?.[0]?.content?.find((c: any) => c?.type === "output_text")
         ?.text ||
       "";
 
-    let briefParsed: any;
+    let briefParsed: any = {};
     try {
       briefParsed = JSON.parse(outputText);
     } catch {
-      // Sometimes the output may arrive in `output[0].content[0].text` etc.
-      // Fallback: try to find any JSON-looking text.
       briefParsed = {};
     }
 
-    const safeBrief = coerceRiskBrief(briefParsed);
-
-    return json(200, safeBrief);
+    return json(200, coerceRiskBrief(briefParsed));
   } catch (err: any) {
-    return json(500, {
-      error: err?.message || "Unhandled server error",
-    });
+    return json(500, { error: err?.message || "Unhandled server error" });
   }
 };
