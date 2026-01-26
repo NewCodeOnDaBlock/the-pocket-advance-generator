@@ -2151,36 +2151,40 @@ export default function App() {
                         {riskBriefErr}
                       </div>
                     ) : null}
-
-                    {riskBrief ? (
-                      <div
-                        className="panel"
-                        style={{
-                          marginTop: 14,
-                          padding: 12,
-                          fontSize: 12,
-                          background: "rgba(0,0,0,0.22)",
-                        }}
-                      >
-                        <div style={{ fontWeight: 900, marginBottom: 8 }}>
-                          AI Risk Brief
-                        </div>
-                        <div
-                          style={{
-                            opacity: 0.9,
-                            lineHeight: 1.5,
-                            whiteSpace: "pre-wrap",
-                          }}
-                        >
-                          <div>
-                            <b>Threat:</b> {riskBrief.threat_level}
+                    
+                    <section>
+                      <div>
+                        {riskBrief ? (
+                          <div
+                            className="panel"
+                            style={{
+                              marginTop: 14,
+                              padding: 12,
+                              fontSize: 12,
+                              background: "rgba(0,0,0,0.22)",
+                            }}
+                          >
+                            <div style={{ fontWeight: 900, marginBottom: 8 }}>
+                              AI Risk Brief
+                            </div>
+                            <div
+                              style={{
+                                opacity: 0.9,
+                                lineHeight: 1.5,
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              <div>
+                                <b>Threat:</b> {riskBrief.threat_level}
+                              </div>
+                              <div style={{ marginTop: 8 }}>
+                                <b>Summary:</b> {riskBrief.summary}
+                              </div>
+                            </div>
                           </div>
-                          <div style={{ marginTop: 8 }}>
-                            <b>Summary:</b> {riskBrief.summary}
-                          </div>
-                        </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </section>
 
                     <div
                       style={{
