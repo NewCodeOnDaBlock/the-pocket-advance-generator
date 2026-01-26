@@ -15,7 +15,6 @@ function json(statusCode: number, body: any) {
     statusCode,
     headers: {
       "Content-Type": "application/json",
-      // If you only call this from your own site, you can tighten this later.
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
