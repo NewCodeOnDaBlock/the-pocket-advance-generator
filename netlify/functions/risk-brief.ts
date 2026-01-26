@@ -150,49 +150,80 @@ export const handler: Handler = async (event) => {
     const inputAdvance = redactMode ? redactAdvance(advance) : advance;
 
     const system = `
-You are an experienced executive protection advance/operations planner.
-Create a concise "Risk Brief" for the provided Pocket Advance.
-
-Hard rules:
-- Output MUST be valid JSON that matches the schema.
-- Keep it practical, non-alarmist, and grounded in the provided info.
-- Do NOT invent specific facts (e.g., named threats, exact crime stats, or specific intel).
-- Use generic risks when details are missing.
-- If info is missing, list questions in missing_info_questions.
-- No markdown, no extra keys.
-`.trim();
+    You are an experienced executive protection (EP) advance and operations planner.
+    Generate a concise, practical "AI Risk Brief" for the provided Pocket Advance.
+    
+    GOAL
+    - Add operational value beyond summarizing inputs.
+    - Identify actionable planning gaps and mitigation steps.
+    - Keep tone calm, professional, and non-alarmist.
+    
+    NON-NEGOTIABLE RULES
+    - Output MUST be valid JSON that matches the provided schema exactly.
+    - Do NOT invent specific facts, named threats, intel, statistics, or venue-specific policies unless explicitly provided in the input.
+    - Do NOT provide probabilistic claims (e.g., "80% chance") or crime rate claims.
+    - Focus on risk drivers, vulnerabilities, and mitigations that are generic-but-useful given the inputs.
+    - If key information is missing, reflect that via:
+      - planning_confidence and confidence_rationale
+      - missing_info_questions
+      - vulnerabilities and mitigations
+    
+    CONTENT GUIDANCE
+    - threat_level should be grounded in the situation complexity + exposure + missing critical info (not imagined threats).
+    - primary_risk_drivers should explain "why" the threat level is what it is (2–6 bullets).
+    - vulnerabilities must be internal/controllable weaknesses, not external threats (2–8 bullets).
+    - recommended_mitigations must be specific actions the team can do (2–10 bullets). Each mitigation should include steps.
+    - go_no_go should include realistic "go_if" and "no_go_if" conditions.
+    - day_of_operator_focus should be a short, practical list of what to pay attention to day-of (3–6 bullets).
+    - include a short disclaimer that this is a planning aid and does not replace recon, judgment, or real-time decisions.
+    
+    STYLE
+    - Keep bullets tight and operator-friendly.
+    - Avoid long paragraphs.
+    - No markdown. No extra keys. No commentary.
+    `.trim();
 
     const schema = {
       type: "object",
       additionalProperties: false,
       properties: {
         summary: { type: "string" },
+
+        disclaimer: { type: "string" },
+
         threat_level: {
           type: "string",
           enum: ["LOW", "MODERATE", "ELEVATED", "HIGH"],
         },
-        key_risks: {
+
+        primary_risk_drivers: {
+          type: "array",
+          items: { type: "string" },
+        },
+
+        planning_confidence: {
+          type: "string",
+          enum: ["LOW", "MEDIUM", "HIGH"],
+        },
+
+        confidence_rationale: {
+          type: "string",
+        },
+
+        vulnerabilities: {
           type: "array",
           items: {
             type: "object",
             additionalProperties: false,
             properties: {
               title: { type: "string" },
-              why_it_matters: { type: "string" },
+              note: { type: "string" },
             },
-            required: ["title", "why_it_matters"],
-          },
-        },
-        vulnerabilities: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: { title: { type: "string" }, note: { type: "string" } },
             required: ["title", "note"],
           },
         },
-        mitigations: {
+
+        recommended_mitigations: {
           type: "array",
           items: {
             type: "object",
@@ -204,6 +235,7 @@ Hard rules:
             required: ["title", "steps"],
           },
         },
+
         go_no_go: {
           type: "object",
           additionalProperties: false,
@@ -213,15 +245,28 @@ Hard rules:
           },
           required: ["go_if", "no_go_if"],
         },
-        missing_info_questions: { type: "array", items: { type: "string" } },
+
+        day_of_operator_focus: {
+          type: "array",
+          items: { type: "string" },
+        },
+
+        missing_info_questions: {
+          type: "array",
+          items: { type: "string" },
+        },
       },
       required: [
         "summary",
+        "disclaimer",
         "threat_level",
-        "key_risks",
+        "primary_risk_drivers",
+        "planning_confidence",
+        "confidence_rationale",
         "vulnerabilities",
-        "mitigations",
+        "recommended_mitigations",
         "go_no_go",
+        "day_of_operator_focus",
         "missing_info_questions",
       ],
     };
