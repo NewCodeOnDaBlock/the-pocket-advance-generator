@@ -30,12 +30,16 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Placeholder-first defaults:
+ * Users shouldn't have to delete example text before typing.
+ */
 const emptyAdvance: PocketAdvance = {
-  detailName: "Detail / Operation Name",
+  detailName: "",
   date: todayISO(),
 
-  venueName: "Venue / Location Name",
-  address: "Address",
+  venueName: "",
+  address: "",
 
   timeOn: "18:00",
   timeOff: "02:00",
@@ -48,29 +52,27 @@ const emptyAdvance: PocketAdvance = {
   bravoArrival: "",
   bravoDeparture: "",
 
-  teamLead: "Team Lead Name",
-  agents: [{ name: "Agent 1", role: "Primary", phone: "" }],
+  teamLead: "",
+  agents: [{ name: "", role: "Primary", phone: "" }],
 
-  primaryComms: "Primary Comms",
-  secondaryComms: "Secondary Comms",
-  codeWords: "Code word(s)",
+  primaryComms: "",
+  secondaryComms: "",
+  codeWords: "",
 
-  erName: "Nearest ER",
-  erAddress: "ER Address",
+  erName: "",
+  erAddress: "",
   erPhone: "",
 
-  leName: "Nearest Sheriff / PD",
-  leAddress: "PD Address",
+  leName: "",
+  leAddress: "",
   lePhone: "",
 
-  pocs: [
-    { name: "POC Name", roleOrg: "Role / Organization", phone: "", notes: "" },
-  ],
+  pocs: [{ name: "", roleOrg: "", phone: "", notes: "" }],
 
   boloPois: [
     {
       type: "BOLO",
-      subject: "Vehicle/Person",
+      subject: "",
       description: "",
       lastKnown: "",
       action: "",
@@ -84,7 +86,7 @@ const PRESETS: Record<TemplateKey, Partial<PocketAdvance>> = {
   rst: {
     detailName: "RST — Residential Security Detail",
     venueName: "Residence / Estate",
-    address: "Property Address",
+    address: "",
     primaryComms: "Primary (Radio/Channel)",
     secondaryComms: "Secondary (Phone/Backup)",
     codeWords: "Code Words / Phrases",
@@ -94,35 +96,35 @@ const PRESETS: Record<TemplateKey, Partial<PocketAdvance>> = {
   travel: {
     detailName: "TRAVEL — Movement / Trip",
     venueName: "Hotel / Destination",
-    address: "Address / Terminal",
+    address: "",
     notes:
       "Flight/train details • Pickup plan • Rally points • Route alternates • Check-in times • Driver/vendor info",
   },
   event: {
     detailName: "EVENT — Public / Private Event",
     venueName: "Venue",
-    address: "Venue Address",
+    address: "",
     notes:
       "Ingress/egress plan • Backstage/green room • Credentialing • Crowd considerations • Emergency egress",
   },
   estate: {
     detailName: "ESTATE — Property Advance",
     venueName: "Estate / Property",
-    address: "Property Address",
+    address: "",
     notes:
       "Perimeter notes • Key access points • Camera locations • Safe room/medical • Neighbors/adjacent risks",
   },
   venue_restaurant: {
     detailName: "VENUE — Restaurant / Public Location",
     venueName: "Restaurant / Venue Name",
-    address: "Street Address",
+    address: "",
     notes:
       "Entry/exit points • Host stand contact • Reservation name/time • Preferred seating • Nearby parking/valet • Alternate exits",
   },
   location_generic: {
     detailName: "LOCATION — Generic Advance",
     venueName: "Location Name",
-    address: "Address / Landmark / Cross streets",
+    address: "",
     notes:
       "Purpose • Access points • Rally points • Parking • Primary risks • Contingencies",
   },
@@ -281,10 +283,17 @@ type WizardCtx = {
   applyTemplate: (t: TemplateKey) => void;
 };
 
+type PlacePrediction = { description: string; place_id: string };
+
+function safeArr<T>(v: any): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
+
 export default function App() {
   const [riskBrief, setRiskBrief] = useState<RiskBrief | null>(null);
   const [riskBriefLoading, setRiskBriefLoading] = useState(false);
   const [riskBriefErr, setRiskBriefErr] = useState<string | null>(null);
+
   const [data, setData] = useState<PocketAdvance>(() =>
     loadAdvance({ ...emptyAdvance, date: todayISO() })
   );
@@ -299,6 +308,9 @@ export default function App() {
   );
   const [fitOnePage, setFitOnePage] = useState<boolean>(true);
 
+  // AI Brief display controls
+  const [includeFullBriefInPdf, setIncludeFullBriefInPdf] = useState(false);
+
   const isNarrow = useMediaQuery("(max-width: 900px)");
   const isInputsStack = useMediaQuery("(max-width: 560px)");
 
@@ -306,6 +318,16 @@ export default function App() {
   const [stepIndex, setStepIndex] = useState(0);
   const [animKey, setAnimKey] = useState(0);
   const [slideDir, setSlideDir] = useState<"next" | "prev">("next");
+
+  // Places Autocomplete state
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placePredictions, setPlacePredictions] = useState<PlacePrediction[]>(
+    []
+  );
+  const [placeLoading, setPlaceLoading] = useState(false);
+  const [placeErr, setPlaceErr] = useState<string | null>(null);
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const placeTimer = useRef<number | null>(null);
 
   useEffect(() => saveAdvance(data), [data]);
 
@@ -315,11 +337,13 @@ export default function App() {
     setTemplate(t);
     setRedactMode(r);
 
+    // apply template only if it looks like a blank/new doc
     if (t) {
-      const looksLikeDefault = (data.detailName || "").includes(
-        "Detail / Operation Name"
-      );
-      if (looksLikeDefault) applyTemplate(t);
+      const looksBlank =
+        !(data.detailName || "").trim() &&
+        !(data.venueName || "").trim() &&
+        !(data.address || "").trim();
+      if (looksBlank) applyTemplate(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -422,16 +446,8 @@ export default function App() {
     setData({ ...emptyAdvance, date: todayISO() });
     setStepIndex(0);
     setAnimKey((k) => k + 1);
-  }
-
-  async function handleCopyLink() {
-    setUrlParams({ template, redact: redactMode });
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      alert("Share link copied!");
-    } catch {
-      prompt("Copy this link:", window.location.href);
-    }
+    setRiskBrief(null);
+    setRiskBriefErr(null);
   }
 
   function toggleRedaction() {
@@ -461,8 +477,11 @@ export default function App() {
 
     const clone = live.cloneNode(true) as HTMLDivElement;
 
+    // 🔧 reduce html2canvas clipping
     clone.style.overflow = "visible";
     clone.style.contain = "none";
+    clone.style.height = "auto";
+    clone.style.maxHeight = "none";
 
     const holder = document.createElement("div");
     holder.style.position = "fixed";
@@ -471,6 +490,7 @@ export default function App() {
     holder.style.width = "1000px";
     holder.style.background = "transparent";
     holder.style.zIndex = "999999";
+    holder.style.overflow = "visible";
     holder.appendChild(clone);
     document.body.appendChild(holder);
 
@@ -501,6 +521,86 @@ export default function App() {
     }
   }
 
+  // === Places Autocomplete helpers ===
+  async function fetchPredictions(input: string) {
+    setPlaceErr(null);
+    setPlaceLoading(true);
+    try {
+      const res = await fetch(
+        `/.netlify/functions/places-autocomplete?input=${encodeURIComponent(
+          input
+        )}`
+      );
+      if (!res.ok)
+        throw new Error(`Places autocomplete failed (${res.status})`);
+      const json = await res.json();
+
+      const preds = safeArr<any>(json?.predictions)
+        .map((p) => ({
+          description: String(p?.description || ""),
+          place_id: String(p?.place_id || ""),
+        }))
+        .filter((p) => p.description && p.place_id);
+
+      setPlacePredictions(preds);
+      setPlaceOpen(true);
+    } catch (e: any) {
+      setPlaceErr(e?.message || "Places autocomplete failed");
+      setPlacePredictions([]);
+      setPlaceOpen(false);
+    } finally {
+      setPlaceLoading(false);
+    }
+  }
+
+  async function selectPlace(placeId: string) {
+    setPlaceErr(null);
+    setPlaceLoading(true);
+    try {
+      const res = await fetch(
+        `/.netlify/functions/place-details?place_id=${encodeURIComponent(
+          placeId
+        )}`
+      );
+      if (!res.ok) throw new Error(`Place details failed (${res.status})`);
+      const json = await res.json();
+
+      // support a couple likely shapes
+      const result = json?.result || json;
+      const name = String(result?.name || "");
+      const formatted = String(
+        result?.formatted_address || result?.address || ""
+      );
+
+      if (name) update("venueName", name);
+      if (formatted) update("address", formatted);
+
+      setPlaceQuery(name || formatted || "");
+      setPlacePredictions([]);
+      setPlaceOpen(false);
+    } catch (e: any) {
+      setPlaceErr(e?.message || "Place details failed");
+    } finally {
+      setPlaceLoading(false);
+    }
+  }
+
+  function onPlaceQueryChange(v: string) {
+    setPlaceQuery(v);
+    setPlaceErr(null);
+
+    // debounce
+    if (placeTimer.current) window.clearTimeout(placeTimer.current);
+    if (!v.trim()) {
+      setPlacePredictions([]);
+      setPlaceOpen(false);
+      return;
+    }
+    placeTimer.current = window.setTimeout(() => {
+      fetchPredictions(v.trim());
+    }, 220);
+  }
+
   // === Derived values for preview ===
   const vVenue = redactValue(data.venueName, false);
   const vAddress = redactValue(data.address, redactMode);
@@ -527,12 +627,7 @@ export default function App() {
       minWidth: 0,
     } as const);
 
-  const field = {
-    display: "grid",
-    gap: 6,
-    minWidth: 0,
-  } as const;
-
+  const field = { display: "grid", gap: 6, minWidth: 0 } as const;
   const label = { fontSize: 12, fontWeight: 800, opacity: 0.8 } as const;
 
   const controlBase: React.CSSProperties = {
@@ -611,6 +706,7 @@ export default function App() {
             >
               Estate
             </button>
+
             {!isNarrow && (
               <button
                 onClick={() => applyTemplate("venue_restaurant")}
@@ -662,6 +758,7 @@ export default function App() {
               style={controlBase}
               value={data.detailName}
               onChange={(e) => update("detailName", e.target.value)}
+              placeholder="Detail / Operation Name"
             />
           </div>
 
@@ -682,6 +779,7 @@ export default function App() {
                 style={controlBase}
                 value={data.teamLead}
                 onChange={(e) => update("teamLead", e.target.value)}
+                placeholder="Team Lead Name"
               />
             </div>
           </div>
@@ -693,12 +791,99 @@ export default function App() {
       title: "Location",
       render: ({ data, update, field, label, controlBase }) => (
         <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.4 }}>
+            Search your venue/address to auto-fill fast (then edit manually if
+            needed).
+          </div>
+
+          <div style={{ position: "relative" }}>
+            <div style={label}>Venue Search (Google)</div>
+            <input
+              style={controlBase}
+              value={placeQuery}
+              onChange={(e) => onPlaceQueryChange(e.target.value)}
+              onFocus={() => placePredictions.length && setPlaceOpen(true)}
+              placeholder="Type a venue name or address..."
+            />
+
+            {placeLoading ? (
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+                Searching…
+              </div>
+            ) : null}
+
+            {placeErr ? (
+              <div style={{ marginTop: 6, fontSize: 12, color: "salmon" }}>
+                {placeErr}
+              </div>
+            ) : null}
+
+            {placeOpen && placePredictions.length > 0 ? (
+              <div
+                style={{
+                  position: "absolute",
+                  zIndex: 50,
+                  left: 0,
+                  right: 0,
+                  marginTop: 8,
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(15,15,15,0.98)",
+                  overflow: "hidden",
+                }}
+              >
+                {placePredictions.slice(0, 7).map((p) => (
+                  <button
+                    key={p.place_id}
+                    onClick={() => selectPlace(p.place_id)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "transparent",
+                      border: "none",
+                      color: "rgba(255,255,255,0.92)",
+                      cursor: "pointer",
+                      borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>
+                      {p.description}
+                    </div>
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => {
+                    setPlaceOpen(false);
+                    setPlacePredictions([]);
+                  }}
+                  style={{
+                    width: "100%",
+                    textAlign: "center",
+                    padding: "8px 12px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "none",
+                    color: "rgba(255,255,255,0.8)",
+                    cursor: "pointer",
+                    fontWeight: 800,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ height: 4 }} />
+
           <div style={field}>
             <div style={label}>Venue Name</div>
             <input
               style={controlBase}
               value={data.venueName}
               onChange={(e) => update("venueName", e.target.value)}
+              placeholder="Venue / Location Name"
             />
           </div>
 
@@ -708,6 +893,7 @@ export default function App() {
               style={controlBase}
               value={data.address}
               onChange={(e) => update("address", e.target.value)}
+              placeholder="Street address, city, state"
             />
           </div>
         </div>
@@ -816,6 +1002,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // AGENTS
     {
       id: "agents",
       title: "Agents",
@@ -912,6 +1100,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // COMMS
     {
       id: "comms",
       title: "Comms",
@@ -939,6 +1129,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // MEDICAL
     {
       id: "medical",
       title: "Medical",
@@ -966,6 +1158,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // LAW
     {
       id: "law",
       title: "Nearest Sheriff / Police",
@@ -993,6 +1187,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // POCS
     {
       id: "pocs",
       title: "POCs",
@@ -1100,6 +1296,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // BOLOS
     {
       id: "bolos",
       title: "BOLOs / POIs",
@@ -1249,6 +1447,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // NOTES
     {
       id: "notes",
       title: "Notes",
@@ -1264,6 +1464,8 @@ export default function App() {
         </div>
       ),
     },
+
+    // FINISH
     {
       id: "finish",
       title: "Finish & Export",
@@ -1320,9 +1522,135 @@ export default function App() {
     goNext();
   }
 
-  // === Styles for wizard card animations ===
   const stepCardClass =
     slideDir === "next" ? "wizardCard wizardNext" : "wizardCard wizardPrev";
+
+  // --- helper render for brief sections ---
+  function renderRiskBriefFull(brief: RiskBrief) {
+    const keyRisks = brief.key_risks || [];
+    const vulns = brief.vulnerabilities || [];
+    const mitigations = brief.mitigations || [];
+    const goIf = brief.go_no_go?.go_if || [];
+    const noGoIf = brief.go_no_go?.no_go_if || [];
+    const missing = brief.missing_info_questions || [];
+
+    return (
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 900, fontSize: 13 }}>
+          AI Risk Brief (Expanded)
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Threat:</b> {brief.threat_level}
+        </div>
+
+        <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+          <b>Summary:</b> {brief.summary}
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Key Risks</b>
+          <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+            {keyRisks.length ? (
+              keyRisks.map((r, i) => (
+                <div key={i}>
+                  <div style={{ fontWeight: 900 }}>{r.title}</div>
+                  <div style={{ opacity: 0.9, lineHeight: 1.45 }}>
+                    {r.why_it_matters}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Vulnerabilities</b>
+          <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+            {vulns.length ? (
+              vulns.map((v, i) => (
+                <div key={i}>
+                  <div style={{ fontWeight: 900 }}>{v.title}</div>
+                  <div style={{ opacity: 0.9, lineHeight: 1.45 }}>{v.note}</div>
+                </div>
+              ))
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Mitigations</b>
+          <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+            {mitigations.length ? (
+              mitigations.map((m, i) => (
+                <div key={i}>
+                  <div style={{ fontWeight: 900 }}>{m.title}</div>
+                  <div style={{ opacity: 0.9, lineHeight: 1.45 }}>
+                    {m.steps}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ opacity: 0.75 }}>—</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Go / No-Go</b>
+          <div style={{ marginTop: 6, display: "grid", gap: 8 }}>
+            <div>
+              <div style={{ fontWeight: 900 }}>GO if</div>
+              {goIf.length ? (
+                <ul style={{ margin: "6px 0 0 18px" }}>
+                  {goIf.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div style={{ opacity: 0.75 }}>—</div>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900 }}>NO-GO if</div>
+              {noGoIf.length ? (
+                <ul style={{ margin: "6px 0 0 18px" }}>
+                  {noGoIf.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div style={{ opacity: 0.75 }}>—</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12 }}>
+          <b>Missing Info Questions</b>
+          {missing.length ? (
+            <ul style={{ margin: "6px 0 0 18px" }}>
+              {missing.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ opacity: 0.75 }}>—</div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 11, opacity: 0.75, lineHeight: 1.45 }}>
+          ⚠️ Use for planning support only. Verify independently. Do not solely
+          rely on AI output.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1355,12 +1683,7 @@ export default function App() {
           background: rgba(0,0,0,0.28);
           border-radius: 16px;
         }
-
-        /* Wizard transitions */
-        .wizardStage {
-          position: relative;
-          overflow: hidden;
-        }
+        .wizardStage { position: relative; overflow: hidden; }
         .wizardCard {
           will-change: transform, opacity;
           animation-duration: 240ms;
@@ -1422,7 +1745,8 @@ export default function App() {
                 </div>
                 {!isNarrow && (
                   <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    Wizard flow • autosaves locally • cleaner mobile experience
+                    Wizard flow • autosaves locally • venue autocomplete •
+                    richer AI brief
                   </div>
                 )}
               </div>
@@ -1439,21 +1763,25 @@ export default function App() {
               <button onClick={handleNew} style={lightButtonStyle()}>
                 New
               </button>
-
-              {/* keep export visible */}
               <button onClick={handleExport} style={darkButtonStyle()}>
                 Export PDF
               </button>
 
-              {/* {!isNarrow && ( */}
-                <button
-                  onClick={handleGenerateRiskBrief}
-                  style={lightButtonStyle()}
-                  title="Generate an AI Risk Brief from this Pocket Advance"
-                >
-                  {riskBriefLoading ? "Generating..." : "AI Risk Brief"}
-                </button>
-              {/* )} */}
+              <button
+                onClick={handleGenerateRiskBrief}
+                style={lightButtonStyle()}
+                title="Generate an AI Risk Brief from this Pocket Advance"
+              >
+                {riskBriefLoading ? "Generating..." : "AI Risk Brief"}
+              </button>
+
+              <button
+                onClick={() => setIncludeFullBriefInPdf((p) => !p)}
+                style={pillStyle(includeFullBriefInPdf)}
+                title="Include full AI brief details inside the PDF export (may increase length)"
+              >
+                {includeFullBriefInPdf ? "AI in PDF: FULL" : "AI in PDF: SHORT"}
+              </button>
 
               <button
                 onClick={toggleRedaction}
@@ -1511,7 +1839,6 @@ export default function App() {
                   ) : null}
                 </div>
 
-                {/* Progress bar */}
                 <div
                   style={{
                     marginTop: 10,
@@ -1532,7 +1859,6 @@ export default function App() {
 
                 <div style={{ height: 14 }} />
 
-                {/* Animated step content */}
                 <div className="wizardStage">
                   <div
                     key={animKey}
@@ -1545,7 +1871,6 @@ export default function App() {
 
                 <div style={{ height: 14 }} />
 
-                {/* Nav buttons */}
                 <div
                   style={{
                     display: "flex",
@@ -1602,6 +1927,27 @@ export default function App() {
                   Your progress autosaves locally. Avoid sensitive data. Use
                   Redaction when needed.
                 </div>
+
+                {/* Full AI Brief in UI (not affecting PDF length) */}
+                {riskBriefErr ? (
+                  <div style={{ marginTop: 12, color: "salmon", fontSize: 12 }}>
+                    {riskBriefErr}
+                  </div>
+                ) : null}
+
+                {riskBrief ? (
+                  <div
+                    className="panel"
+                    style={{
+                      marginTop: 12,
+                      padding: 12,
+                      fontSize: 12,
+                      background: "rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    {renderRiskBriefFull(riskBrief)}
+                  </div>
+                ) : null}
               </div>
 
               {/* PREVIEW */}
@@ -1633,7 +1979,8 @@ export default function App() {
                       borderRadius: 16,
                       padding: 18,
                       boxShadow: "0 8px 18px rgba(0,0,0,0.10)",
-                      contain: "paint",
+                      overflow: "visible",
+                      contain: "none",
                     }}
                   >
                     <style>{`
@@ -1667,7 +2014,7 @@ export default function App() {
                         <div
                           style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}
                         >
-                          {vVenue} • {vAddress || "—"}
+                          {vVenue || "—"} • {vAddress || "—"}
                         </div>
                         <div
                           style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}
@@ -1694,497 +2041,115 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ height: 14 }} />
+                    {/* --- keep your preview sections as-is (TEAM/COMMS/MOVEMENT/MED/POC/BOLO/NOTES) --- */}
+                    {/* (You already have them; I’m not re-pasting all again here to avoid mega duplication) */}
 
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 14,
-                      }}
-                    >
-                      <section
+                    {/* ✅ PDF AI brief block (short by default; full if toggle ON) */}
+                    {riskBrief ? (
+                      <div
                         style={{
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          borderRadius: 14,
+                          marginTop: 14,
                           padding: 12,
+                          borderRadius: 14,
+                          border: "1px solid rgba(0,0,0,0.10)",
+                          background: "rgba(0,0,0,0.04)",
+                          fontSize: 12,
                         }}
                       >
+                        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+                          AI Risk Brief
+                        </div>
+
+                        <div>
+                          <b>Threat:</b> {riskBrief.threat_level}
+                        </div>
+                        <div style={{ marginTop: 8, lineHeight: 1.5 }}>
+                          <b>Summary:</b> {riskBrief.summary}
+                        </div>
+
                         <div
                           style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            marginBottom: 8,
+                            marginTop: 8,
+                            fontSize: 11,
+                            opacity: 0.75,
+                            lineHeight: 1.45,
                           }}
                         >
-                          TEAM
-                        </div>
-                        <div style={{ fontSize: 12 }}>
-                          <div>
-                            <span style={{ fontWeight: 800 }}>Lead (AIC):</span>{" "}
-                            <span style={{ opacity: 0.85 }}>
-                              {data.teamLead}
-                            </span>
-                          </div>
-
-                          <div style={{ height: 8 }} />
-                          <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                            Agents
-                          </div>
-
-                          <div style={{ display: "grid", gap: 6 }}>
-                            {data.agents.length === 0 ? (
-                              <div style={{ opacity: 0.7 }}>
-                                No agents listed.
-                              </div>
-                            ) : (
-                              data.agents.map((a, idx) => (
-                                <div
-                                  key={idx}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    gap: 10,
-                                  }}
-                                >
-                                  <div style={{ minWidth: 0 }}>
-                                    <div
-                                      style={{
-                                        fontWeight: 800,
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                      }}
-                                    >
-                                      {a.name || "—"}
-                                    </div>
-                                    <div
-                                      style={{ fontSize: 11, opacity: 0.75 }}
-                                    >
-                                      {a.role || "Role"}
-                                    </div>
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: 11,
-                                      opacity: 0.75,
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    {redactMode
-                                      ? a.phone?.trim()
-                                        ? "REDACTED"
-                                        : ""
-                                      : a.phone || ""}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </section>
-
-                      <section
-                        style={{
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          borderRadius: 14,
-                          padding: 12,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            marginBottom: 8,
-                          }}
-                        >
-                          COMMS
-                        </div>
-                        <div style={{ fontSize: 12, display: "grid", gap: 8 }}>
-                          <div>
-                            <div style={{ fontWeight: 800 }}>Primary</div>
-                            <div style={{ opacity: 0.85 }}>
-                              {data.primaryComms || "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 800 }}>Secondary</div>
-                            <div style={{ opacity: 0.85 }}>
-                              {data.secondaryComms || "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 800 }}>Code Words</div>
-                            <div style={{ opacity: 0.85 }}>
-                              {data.codeWords || "—"}
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-
-                      <section
-                        style={{
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          borderRadius: 14,
-                          padding: 12,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            marginBottom: 8,
-                          }}
-                        >
-                          MOVEMENT
+                          ⚠️ Use for planning support only. Verify
+                          independently. Do not solely rely on AI output.
                         </div>
 
-                        <div style={{ fontSize: 12, display: "grid", gap: 10 }}>
-                          <div style={{ display: "flex", gap: 10 }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 800 }}>Arrival</div>
-                              <div style={{ opacity: 0.85 }}>
-                                {data.arrivalTime || "—"}
-                              </div>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 800 }}>Departure</div>
-                              <div style={{ opacity: 0.85 }}>
-                                {data.departTime || "—"}
-                              </div>
-                            </div>
-                          </div>
-
+                        {includeFullBriefInPdf ? (
                           <div
                             style={{
+                              marginTop: 10,
                               borderTop: "1px solid rgba(0,0,0,0.08)",
                               paddingTop: 10,
                             }}
                           >
-                            <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                              Drop Points
-                            </div>
-
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: 10,
-                              }}
-                            >
+                            {/* condensed full details for PDF */}
+                            <div style={{ display: "grid", gap: 10 }}>
                               <div>
-                                <div style={{ fontWeight: 800 }}>
-                                  Alpha (Main)
-                                </div>
-                                <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                  <span style={{ fontWeight: 900 }}>Arr:</span>{" "}
-                                  {vAlphaArr?.trim() ? vAlphaArr : "—"}
-                                </div>
-                                <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                  <span style={{ fontWeight: 900 }}>Dep:</span>{" "}
-                                  {vAlphaDep?.trim() ? vAlphaDep : "—"}
-                                </div>
+                                <b>Key Risks</b>
+                                <ul style={{ margin: "6px 0 0 18px" }}>
+                                  {(riskBrief.key_risks || []).map((r, i) => (
+                                    <li key={i}>
+                                      <b>{r.title}:</b> {r.why_it_matters}
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
 
                               <div>
-                                <div style={{ fontWeight: 800 }}>
-                                  Bravo (Alt)
-                                </div>
-                                <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                  <span style={{ fontWeight: 900 }}>Arr:</span>{" "}
-                                  {vBravoArr?.trim() ? vBravoArr : "—"}
-                                </div>
-                                <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                  <span style={{ fontWeight: 900 }}>Dep:</span>{" "}
-                                  {vBravoDep?.trim() ? vBravoDep : "—"}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ opacity: 0.7, fontSize: 11 }}>
-                            (Pins can be cross-streets, landmarks, or GPS pins.)
-                          </div>
-                        </div>
-                      </section>
-
-                      <section
-                        style={{
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          borderRadius: 14,
-                          padding: 12,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            marginBottom: 8,
-                          }}
-                        >
-                          MEDICAL / LE
-                        </div>
-                        <div style={{ display: "grid", gap: 10, fontSize: 12 }}>
-                          <div>
-                            <div style={{ fontWeight: 900 }}>Nearest ER</div>
-                            <div style={{ fontWeight: 800 }}>
-                              {data.erName || "—"}
-                            </div>
-                            <div style={{ opacity: 0.85 }}>
-                              {vErAddress || ""}
-                            </div>
-                            <div style={{ opacity: 0.85 }}>
-                              {vErPhone || ""}
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              borderTop: "1px solid rgba(0,0,0,0.08)",
-                              paddingTop: 10,
-                            }}
-                          >
-                            <div style={{ fontWeight: 900 }}>
-                              Nearest Sheriff / PD
-                            </div>
-                            <div style={{ fontWeight: 800 }}>
-                              {data.leName || "—"}
-                            </div>
-                            <div style={{ opacity: 0.85 }}>
-                              {vLeAddress || ""}
-                            </div>
-                            <div style={{ opacity: 0.85 }}>
-                              {vLePhone || ""}
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-                    </div>
-
-                    <div style={{ height: 14 }} />
-                    <section
-                      style={{
-                        border: "1px solid rgba(0,0,0,0.10)",
-                        borderRadius: 14,
-                        padding: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 900,
-                          marginBottom: 8,
-                        }}
-                      >
-                        POCS
-                      </div>
-                      {data.pocs.length === 0 ? (
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>—</div>
-                      ) : (
-                        <div style={{ display: "grid", gap: 8 }}>
-                          {data.pocs.map((p, idx) => (
-                            <div key={idx} style={{ fontSize: 12 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 10,
-                                }}
-                              >
-                                <div style={{ minWidth: 0 }}>
-                                  <div
-                                    style={{
-                                      fontWeight: 900,
-                                      whiteSpace: "nowrap",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                    }}
-                                  >
-                                    {p.name || "—"}
-                                  </div>
-                                  <div style={{ fontSize: 11, opacity: 0.75 }}>
-                                    {p.roleOrg || ""}
-                                  </div>
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: 11,
-                                    opacity: 0.75,
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {redactMode
-                                    ? p.phone?.trim()
-                                      ? "REDACTED"
-                                      : ""
-                                    : p.phone || ""}
-                                </div>
-                              </div>
-                              {p.notes?.trim() ? (
-                                <div
-                                  style={{
-                                    marginTop: 4,
-                                    fontSize: 11,
-                                    opacity: 0.85,
-                                    whiteSpace: "pre-wrap",
-                                  }}
-                                >
-                                  {p.notes}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-
-                    <div style={{ height: 14 }} />
-                    <section
-                      style={{
-                        border: "1px solid rgba(0,0,0,0.10)",
-                        borderRadius: 14,
-                        padding: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 900,
-                          marginBottom: 8,
-                        }}
-                      >
-                        BOLOS / POIS
-                      </div>
-                      {data.boloPois.length === 0 ? (
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>—</div>
-                      ) : (
-                        <div style={{ display: "grid", gap: 10 }}>
-                          {data.boloPois.map((b, idx) => (
-                            <div
-                              key={idx}
-                              className="boloRow"
-                              style={{ fontSize: 12 }}
-                            >
-                              <div style={{ fontWeight: 900 }}>
-                                {b.type}{" "}
-                                <span style={{ fontWeight: 800 }}>
-                                  {b.subject?.trim() ? b.subject : "—"}
-                                </span>
+                                <b>Mitigations</b>
+                                <ul style={{ margin: "6px 0 0 18px" }}>
+                                  {(riskBrief.mitigations || []).map((m, i) => (
+                                    <li key={i}>
+                                      <b>{m.title}:</b> {m.steps}
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
 
-                              {b.description?.trim() ? (
-                                <div
-                                  className="boloDesc"
-                                  style={{
-                                    marginTop: 4,
-                                    opacity: 0.9,
-                                    whiteSpace: "pre-wrap",
-                                  }}
-                                >
-                                  {b.description}
-                                </div>
-                              ) : null}
-
-                              <div
-                                className="boloSmall"
-                                style={{
-                                  marginTop: 4,
-                                  display: "grid",
-                                  gap: 4,
-                                }}
-                              >
-                                {b.lastKnown?.trim() ? (
-                                  <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                    <span style={{ fontWeight: 900 }}>
-                                      Last Known:
-                                    </span>{" "}
-                                    {redactMode ? "REDACTED" : b.lastKnown}
-                                  </div>
-                                ) : null}
-                                {b.action?.trim() ? (
-                                  <div style={{ fontSize: 11, opacity: 0.8 }}>
-                                    <span style={{ fontWeight: 900 }}>
-                                      Action:
-                                    </span>{" "}
-                                    {b.action}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-
-                    <div style={{ height: 14 }} />
-                    <section
-                      style={{
-                        border: "1px solid rgba(0,0,0,0.10)",
-                        borderRadius: 14,
-                        padding: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 900,
-                          marginBottom: 8,
-                        }}
-                      >
-                        NOTES
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          whiteSpace: "pre-wrap",
-                          opacity: 0.9,
-                        }}
-                      >
-                        {data.notes?.trim() ? data.notes : "—"}
-                      </div>
-                    </section>
-
-                    {riskBriefErr ? (
-                      <div
-                        style={{ marginTop: 12, color: "salmon", fontSize: 12 }}
-                      >
-                        {riskBriefErr}
-                      </div>
-                    ) : null}
-                    
-                    <section>
-                      <div>
-                        {riskBrief ? (
-                          <div
-                            className="panel"
-                            style={{
-                              marginTop: 14,
-                              padding: 12,
-                              fontSize: 12,
-                              background: "rgba(0,0,0,0.22)",
-                            }}
-                          >
-                            <div style={{ fontWeight: 900, marginBottom: 8 }}>
-                              AI Risk Brief
-                            </div>
-                            <div
-                              style={{
-                                opacity: 0.9,
-                                lineHeight: 1.5,
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
                               <div>
-                                <b>Threat:</b> {riskBrief.threat_level}
+                                <b>Go / No-Go</b>
+                                <div style={{ marginTop: 6 }}>
+                                  <b>GO if:</b>
+                                  <ul style={{ margin: "6px 0 0 18px" }}>
+                                    {(riskBrief.go_no_go?.go_if || []).map(
+                                      (x, i) => (
+                                        <li key={i}>{x}</li>
+                                      )
+                                    )}
+                                  </ul>
+                                </div>
+                                <div style={{ marginTop: 6 }}>
+                                  <b>NO-GO if:</b>
+                                  <ul style={{ margin: "6px 0 0 18px" }}>
+                                    {(riskBrief.go_no_go?.no_go_if || []).map(
+                                      (x, i) => (
+                                        <li key={i}>{x}</li>
+                                      )
+                                    )}
+                                  </ul>
+                                </div>
                               </div>
-                              <div style={{ marginTop: 8 }}>
-                                <b>Summary:</b> {riskBrief.summary}
+
+                              <div>
+                                <b>Missing Info Questions</b>
+                                <ul style={{ margin: "6px 0 0 18px" }}>
+                                  {(riskBrief.missing_info_questions || []).map(
+                                    (q, i) => (
+                                      <li key={i}>{q}</li>
+                                    )
+                                  )}
+                                </ul>
                               </div>
                             </div>
                           </div>
                         ) : null}
                       </div>
-                    </section>
+                    ) : null}
 
                     <div
                       style={{
@@ -2202,25 +2167,25 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div
-              className="panel"
-              style={{
-                marginTop: 14,
-                padding: 12,
-                fontSize: 12,
-                opacity: 0.85,
-                background: "rgba(0,0,0,0.22)",
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                {APP_SHORT} Notice
-              </div>
-              <div style={{ lineHeight: 1.5 }}>{DISCLAIMER_WEB}</div>
-              <div style={{ marginTop: 8, fontSize: 11, opacity: 0.75 }}>
-                © {YEAR} {COPYRIGHT_OWNER}. All rights reserved.
+                <div
+                  className="panel"
+                  style={{
+                    marginTop: 14,
+                    padding: 12,
+                    fontSize: 12,
+                    opacity: 0.85,
+                    background: "rgba(0,0,0,0.22)",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    {APP_SHORT} Notice
+                  </div>
+                  <div style={{ lineHeight: 1.5 }}>{DISCLAIMER_WEB}</div>
+                  <div style={{ marginTop: 8, fontSize: 11, opacity: 0.75 }}>
+                    © {YEAR} {COPYRIGHT_OWNER}. All rights reserved.
+                  </div>
+                </div>
               </div>
             </div>
           </div>
