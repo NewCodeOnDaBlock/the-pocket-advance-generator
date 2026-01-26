@@ -1445,7 +1445,7 @@ export default function App() {
                 Export PDF
               </button>
 
-              {!isNarrow && (
+              {/* {!isNarrow && ( */}
                 <button
                   onClick={handleGenerateRiskBrief}
                   style={lightButtonStyle()}
@@ -1453,7 +1453,7 @@ export default function App() {
                 >
                   {riskBriefLoading ? "Generating..." : "AI Risk Brief"}
                 </button>
-              )}
+              {/* )} */}
 
               <button
                 onClick={toggleRedaction}
