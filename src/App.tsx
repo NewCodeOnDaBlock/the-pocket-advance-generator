@@ -5,7 +5,6 @@ import { exportElementToPdf } from "./utils/exportPdf";
 import { generateRiskBrief } from "./utils/riskBriefClient";
 import type { RiskBrief } from "./utils/riskBriefTypes";
 
-
 import radenLogo from "./assets/raden-logo.png";
 
 const APP_NAME = "Raden — The First Pocket Advance Generator";
@@ -461,6 +460,9 @@ export default function App() {
     const live = previewRef.current;
 
     const clone = live.cloneNode(true) as HTMLDivElement;
+
+    clone.style.overflow = "visible";
+    clone.style.contain = "none";
 
     const holder = document.createElement("div");
     holder.style.position = "fixed";
